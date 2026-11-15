@@ -1,7 +1,7 @@
 # 非负 FISTA P0 设计规格
 
 - 日期：2026-11-15
-- 状态：待用户复核
+- 状态：用户已确认；实施计划已批准（2026-11-15）
 - 范围：非负 LASSO / 弹性网的通用 Python 求解基线
 
 ## 1. 目标与边界
@@ -221,16 +221,16 @@ KKT 条件为：
 弹性网采用增广算子推导对偶。取对偶变量
 
 \[
-\nu=\theta r,\qquad \eta=-\theta\sqrt{\mu}x.
+\nu=\theta r,\qquad \eta=\theta\sqrt{\mu}x.
 \]
 
 对偶可行约束为
 
 \[
-\theta(A^Tr-\mu x)\ge-\lambda\mathbf 1.
+\theta(A^Tr+\mu x)\ge-\lambda\mathbf 1.
 \]
 
-令 `q=Aᵀr-μx`，取
+令 `q=Aᵀr+μx`，取
 
 \[
 \theta=\min\left(1,\min_{q_i<0}\frac{\lambda}{-q_i}\right),
