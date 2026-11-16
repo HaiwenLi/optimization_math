@@ -115,28 +115,12 @@ def _backtracked_prox(op, y, b_vec, z, grad, L, lam, mu, enabled, f_z):
     raise FloatingPointError("Backtracking failed to find a finite stable step")
 
 
-def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
-                max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
-                certificate_stride=10, power_iter=50, power_tol=1e-6,
-                restart=True, backtracking=True):
-    max_iter = _positive_int(max_iter, "max_iter")
-    certificate_stride = _positive_int(certificate_stride, "certificate_stride")
-    power_iter = _positive_int(power_iter, "power_iter")
-    kkt_tol = _positive_float(kkt_tol, "kkt_tol")
-    gap_tol = _positive_float(gap_tol, "gap_tol")
-    power_tol = _positive_float(power_tol, "power_tol")
-    if lipschitz is not None:
-        lipschitz = _positive_float(lipschitz, "lipschitz")
-
-    op = as_linear_operator(A)
-    y, b_vec, x, lam, mu = _validate_common(op, y, lam, mu, b, x0)
-    L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
-        op, power_iter=power_iter, power_tol=power_tol
-    )
+def _run_stage(op, y, b_vec, x, *, lam, mu, L, restart, backtracking,
+               max_iter, kkt_tol, gap_tol, certificate_stride, stage):
     z = x.copy()
     momentum = 1.0
     restart_count = 0
-    history = [compute_certificate(op, y, x, lam, mu=mu, b=b_vec, stage=0, iteration=0)]
+    history = [compute_certificate(op, y, x, lam, mu=mu, b=b_vec, stage=stage, iteration=0)]
     status = "max_iter"
     iterations = 0
 
@@ -165,7 +149,7 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
                 restart_count += 1
 
             if k % certificate_stride == 0 or k == max_iter:
-                cert = compute_certificate(op, y, x_new, lam, mu=mu, b=b_vec, stage=0, iteration=k)
+                cert = compute_certificate(op, y, x_new, lam, mu=mu, b=b_vec, stage=stage, iteration=k)
                 history.append(cert)
                 if cert.kkt_residual <= kkt_tol and cert.relative_gap <= gap_tol:
                     x = x_new
@@ -179,4 +163,55 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
             momentum = next_momentum
             iterations = k
 
-    return FistaResult(x, status, iterations, iterations, L, restart_count, history[-1], tuple(history))
+    return x, status, iterations, L, restart_count, history[-1], history
+
+
+def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
+                max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
+                certificate_stride=10, power_iter=50, power_tol=1e-6,
+                restart=True, backtracking=True,
+                lambda_path=None, continuation_tol_scale=10.0):
+    max_iter = _positive_int(max_iter, "max_iter")
+    certificate_stride = _positive_int(certificate_stride, "certificate_stride")
+    power_iter = _positive_int(power_iter, "power_iter")
+    kkt_tol = _positive_float(kkt_tol, "kkt_tol")
+    gap_tol = _positive_float(gap_tol, "gap_tol")
+    power_tol = _positive_float(power_tol, "power_tol")
+    if lipschitz is not None:
+        lipschitz = _positive_float(lipschitz, "lipschitz")
+
+    op = as_linear_operator(A)
+    y, b_vec, x, lam, mu = _validate_common(op, y, lam, mu, b, x0)
+    path = [float(lam)] if lambda_path is None else [float(v) for v in lambda_path]
+    if (not path or path[-1] != lam or any(not np.isfinite(v) or v <= 0 for v in path)
+            or any(path[i] <= path[i + 1] for i in range(len(path) - 1))):
+        raise ValueError("lambda_path must be positive, strictly decreasing, and end at lam")
+    if continuation_tol_scale < 1.0:
+        raise ValueError("continuation_tol_scale must be at least one")
+
+    L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
+        op, power_iter=power_iter, power_tol=power_tol
+    )
+    status = "max_iter"
+    iterations = 0
+    total_iterations = 0
+    restart_count = 0
+    certificate = None
+    history = []
+
+    for stage, stage_lam in enumerate(path):
+        scale = 1.0 if stage == len(path) - 1 else continuation_tol_scale
+        x, status, iterations, L, stage_restarts, certificate, stage_history = _run_stage(
+            op, y, b_vec, x,
+            lam=stage_lam, mu=mu, L=L,
+            restart=restart, backtracking=backtracking,
+            max_iter=max_iter, kkt_tol=kkt_tol * scale, gap_tol=gap_tol * scale,
+            certificate_stride=certificate_stride, stage=stage,
+        )
+        total_iterations += iterations
+        restart_count += stage_restarts
+        history.extend(stage_history)
+
+    return FistaResult(
+        x, status, iterations, total_iterations, L, restart_count, certificate, tuple(history)
+    )

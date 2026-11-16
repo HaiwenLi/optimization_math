@@ -180,3 +180,23 @@ def test_restarted_fista_converges_on_correlated_operator():
     )
     assert result.status == "converged"
     assert np.all(result.x >= 0)
+
+
+def test_lambda_path_warm_starts_each_stage_and_finishes_at_target():
+    result = solve_fista(
+        np.array([[1.0]]), np.array([2.0]), 0.5,
+        lambda_path=[2.0, 1.0, 0.5], certificate_stride=1,
+        kkt_tol=1e-7, gap_tol=1e-8,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [1.5], atol=1e-6)
+    assert result.certificate.lam == 0.5
+    assert {cert.stage for cert in result.history} == {0, 1, 2}
+    assert [cert.iteration for cert in result.history if cert.stage == 1][0] == 0
+    assert result.total_iterations >= result.iterations
+
+
+def test_lambda_path_must_be_strictly_decreasing_and_end_at_target():
+    for path in ([2.0, 1.0, 1.0, 0.5], [2.0, 1.0]):
+        with pytest.raises(ValueError, match="lambda_path"):
+            solve_fista(np.array([[1.0]]), np.array([2.0]), 0.5, lambda_path=path)
