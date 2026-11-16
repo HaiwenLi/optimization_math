@@ -37,7 +37,7 @@
 - Consumes: Existing NumPy/pytest environment.
 - Produces: `LinearOperator`, `as_linear_operator(A)`, checked `shape`, `matvec`, and `rmatvec` used by every later task.
 
-- [ ] **Step 1: Add package configuration and a failing dense-operator test**
+- [x] **Step 1: Add package configuration and a failing dense-operator test**
 
 Create `pyproject.toml`:
 
@@ -107,7 +107,7 @@ def test_operator_rejects_wrong_input_and_output_shapes():
         as_linear_operator(BadOutput()).matvec(np.ones(3))
 ```
 
-- [ ] **Step 2: Install the local package and verify RED**
+- [x] **Step 2: Install the local package and verify RED**
 
 Run:
 
@@ -118,7 +118,7 @@ python -m pytest tests/test_operators.py -v
 
 Expected: collection fails because `optimization_math.operators` does not exist. Do not proceed until the failure is caused by the missing operator module.
 
-- [ ] **Step 3: Implement the minimal checked operator adapter**
+- [x] **Step 3: Implement the minimal checked operator adapter**
 
 Create `src/optimization_math/operators.py`:
 
@@ -193,7 +193,7 @@ def as_linear_operator(A) -> LinearOperator:
     return _CheckedOperator(A)
 ```
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Run `python -m pytest tests/test_operators.py -v`; expect both tests to pass.
 
@@ -217,7 +217,7 @@ git commit -m "feat: add checked linear operator interface"
 - Consumes: `as_linear_operator` from Task 1.
 - Produces: `_nonnegative_elastic_net_prox`, `lambda_max`, frozen `Certificate`, and `compute_certificate` consumed by the solver.
 
-- [ ] **Step 1: Write hand-derived failing math tests**
+- [x] **Step 1: Write hand-derived failing math tests**
 
 Create `tests/test_certificates.py`:
 
@@ -284,7 +284,7 @@ def test_nonnegative_elastic_net_prox_uses_soft_threshold_and_l2_denominator():
     z = np.array([-2.0, 0.5, 2.0])
     np.testing.assert_allclose(
         _nonnegative_elastic_net_prox(z, step=0.5, lam=0.5, mu=0.0),
-        [0.0, 0.0, 1.75],
+        [0.0, 0.25, 1.75],
     )
     np.testing.assert_allclose(
         _nonnegative_elastic_net_prox(z, step=0.5, lam=0.5, mu=2.0),
@@ -298,12 +298,12 @@ def test_lambda_max_is_threshold_for_zero_stationarity():
     assert lambda_max(A, y) == pytest.approx(3.0)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `python -m pytest tests/test_certificates.py tests/test_fista.py -v`.
 Expected: collection fails for the missing certificate and FISTA modules.
 
-- [ ] **Step 3: Implement certificates with the corrected augmented dual**
+- [x] **Step 3: Implement certificates with the corrected augmented dual**
 
 Create `src/optimization_math/certificates.py`:
 
@@ -369,7 +369,7 @@ def compute_certificate(A, y, x, lam, *, mu=0.0, b=None, stage=0, iteration=0):
     return Certificate(stage, iteration, float(lam), float(primal), float(dual), float(kkt), float(gap))
 ```
 
-- [ ] **Step 4: Implement prox and lambda_max, then verify GREEN**
+- [x] **Step 4: Implement prox and lambda_max, then verify GREEN**
 
 Create an empty `src/optimization_math/solvers/__init__.py` and add to `src/optimization_math/solvers/fista.py`:
 
@@ -396,7 +396,7 @@ def lambda_max(A, y, *, b=None):
 
 Run `python -m pytest tests/test_certificates.py tests/test_fista.py -v`; expect all six tests to pass. The elastic-net scalar test must pass with `q=A.T@r+mu*x`; changing it to a minus sign must fail.
 
-- [ ] **Step 5: Run the suite and commit**
+- [x] **Step 5: Run the suite and commit**
 
 Run `python -m pytest -v`; expect all tests to pass.
 
@@ -417,7 +417,7 @@ git commit -m "feat: add nonnegative optimality certificates"
 - Consumes: Task 1 operator and Task 2 prox/certificate functions.
 - Produces: `FistaResult` and `solve_fista` with base momentum, power iteration, elastic-net support, final certificates, and honest `max_iter` status.
 
-- [ ] **Step 1: Add failing scalar, zero-solution, and stopping tests**
+- [x] **Step 1: Add failing scalar, zero-solution, and stopping tests**
 
 Append to `tests/test_fista.py`:
 
@@ -456,6 +456,7 @@ def test_fista_iteration_limit_does_not_claim_convergence():
     result = solve_fista(
         np.array([[1.0]]), np.array([2.0]), 0.1,
         max_iter=1, certificate_stride=20, kkt_tol=1e-12, gap_tol=1e-12,
+        lipschitz=2.0,
     )
     assert result.status == "max_iter"
     assert result.iterations == 1
@@ -490,7 +491,7 @@ def test_fista_uses_black_box_operator_without_dense_matrix_access():
         lipschitz=4.0, certificate_stride=1, kkt_tol=1e-7, gap_tol=1e-8,
     )
     assert result.status == "converged"
-    np.testing.assert_allclose(result.x, [2.5, 0.25], atol=1e-6)
+    np.testing.assert_allclose(result.x, [2.5, 0.375], atol=1e-6)
 
 
 def test_fista_applies_known_background_before_fitting():
@@ -513,12 +514,12 @@ def test_fista_rejects_invalid_shapes_nonfinite_data_and_controls(overrides):
         solve_fista(**kwargs)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `python -m pytest tests/test_fista.py -k "fista" -v`.
 Expected: collection fails because `solve_fista` and `FistaResult` are not implemented.
 
-- [ ] **Step 3: Implement result types, validation, and power iteration**
+- [x] **Step 3: Implement result types, validation, and power iteration**
 
 Add to `fista.py`:
 
@@ -578,7 +579,7 @@ def _validate_common(op, y, lam, mu, b, x0):
 
 Validate positive integer `max_iter`, `certificate_stride`, and `power_iter`; positive finite tolerances and user-supplied `lipschitz`; raise `ValueError` on violation.
 
-- [ ] **Step 4: Implement the base iteration and certificate stopping**
+- [x] **Step 4: Implement the base iteration and certificate stopping**
 
 Implement the initial public signature without continuation/restart options yet:
 
@@ -633,7 +634,7 @@ return FistaResult(x, status, iterations, iterations, L, 0, history[-1], tuple(h
 
 The executor may remove the unused `x_previous` variable during the green refactor without changing behavior. Do not add restart or continuation in this task.
 
-- [ ] **Step 5: Verify GREEN, run all tests, and commit**
+- [x] **Step 5: Verify GREEN, run all tests, and commit**
 
 Run `python -m pytest tests/test_fista.py -v`, then `python -m pytest -v`.
 Expected: all tests pass, including exact zero-iteration convergence at `lambda_max`.
@@ -655,7 +656,7 @@ git commit -m "feat: implement base nonnegative FISTA solver"
 - Consumes: Base solver from Task 3.
 - Produces: Final `solve_fista` signature with `restart`, `backtracking`, `lambda_path`, and `continuation_tol_scale`; stage-local histories and aggregate restart/iteration counts.
 
-- [ ] **Step 1: Add failing backtracking and restart tests**
+- [x] **Step 1: Add failing backtracking and restart tests**
 
 Append:
 
@@ -687,7 +688,7 @@ def test_restarted_fista_converges_on_correlated_operator():
     assert np.all(result.x >= 0)
 ```
 
-- [ ] **Step 2: Verify the new options are missing, then implement them**
+- [x] **Step 2: Verify the new options are missing, then implement them**
 
 Run `python -m pytest tests/test_fista.py -k "backtracking or restart" -v`.
 Expected: failures for unexpected keyword arguments and the missing restart predicate.
@@ -721,7 +722,7 @@ def _backtracked_prox(op, y, b_vec, z, grad, L, lam, mu, enabled):
 
 In the executor, compute `r_z` once and pass its squared norm into this helper instead of evaluating `matvec(z)` twice; preserve the formula. If `_gradient_restart_needed(grad, x_new, x)` is true, recompute from `z=x`, reset `momentum=1.0`, count the restart, and use the non-extrapolated accepted step. Keep the increased `L` for later iterations.
 
-- [ ] **Step 3: Run focused tests and commit the robustness increment**
+- [x] **Step 3: Run focused tests and commit the robustness increment**
 
 Run `python -m pytest tests/test_fista.py -k "backtracking or restart" -v`, then `python -m pytest -v`.
 Expected: all tests pass.
@@ -731,7 +732,7 @@ git add src/optimization_math/solvers/fista.py tests/test_fista.py
 git commit -m "feat: safeguard FISTA with backtracking and restart"
 ```
 
-- [ ] **Step 4: Add failing continuation tests**
+- [x] **Step 4: Add failing continuation tests**
 
 Append:
 
@@ -756,7 +757,7 @@ def test_lambda_path_must_be_strictly_decreasing_and_end_at_target():
             solve_fista(np.array([[1.0]]), np.array([2.0]), 0.5, lambda_path=path)
 ```
 
-- [ ] **Step 5: Verify RED and implement stage-wise continuation**
+- [x] **Step 5: Verify RED and implement stage-wise continuation**
 
 Run `python -m pytest tests/test_fista.py -k "lambda_path" -v`; expect unexpected-keyword failures.
 
@@ -781,7 +782,7 @@ stage_gap_tol = gap_tol * scale
 
 Intermediate stages proceed after either dual-certificate convergence or their own `max_iter`; only the final stage determines public `status`. Return final-stage `iterations`, summed `total_iterations`, summed `restart_count`, final `L`, and concatenated stage histories.
 
-- [ ] **Step 6: Verify GREEN, run all tests, and commit**
+- [x] **Step 6: Verify GREEN, run all tests, and commit**
 
 Run `python -m pytest tests/test_fista.py -k "lambda_path" -v`, then `python -m pytest -v`.
 Expected: all tests pass.
@@ -805,7 +806,7 @@ git commit -m "feat: add FISTA lambda continuation"
 - Consumes: All public functions and result fields from Tasks 1–4.
 - Produces: A minimal runnable example and documentation consistent with the implemented certificate cost and augmented dual.
 
-- [ ] **Step 1: Add the minimal README example**
+- [x] **Step 1: Add the minimal README example**
 
 Document this runnable API, not an aspirational interface:
 
@@ -827,7 +828,7 @@ print(result.certificate.kkt_residual, result.certificate.relative_gap)
 
 Add installation commands `python -m pip install -e ".[test]"` and `python -m pytest -v`. Update the directory tree to show `operators.py`, `certificates.py`, and `solvers/fista.py`.
 
-- [ ] **Step 2: Correct certificate-cost and elastic-net dual prose**
+- [x] **Step 2: Correct certificate-cost and elastic-net dual prose**
 
 In README, replace “每步免费产出证书” with a statement that certificates are evaluated at a configurable interval and at the final iterate.
 
@@ -839,7 +840,7 @@ In the survey:
 
 Update the specification status to record user approval and the corrected dual sign. Mark completed plan checkboxes only after their commands have actually passed.
 
-- [ ] **Step 3: Run the README example and full verification**
+- [x] **Step 3: Run the README example and full verification**
 
 Run:
 
@@ -852,7 +853,7 @@ git status --short --branch
 
 Expected: all tests pass without warnings; `git diff --check` has no output. Run the README example with Python and confirm it prints `converged`-quality final certificates. Scan changed text for absolute user paths, email addresses, tokens, and private keys; remove any accidental additions without altering the already-public historical author metadata.
 
-- [ ] **Step 4: Commit documentation and report limits**
+- [x] **Step 4: Commit documentation and report limits**
 
 ```powershell
 git add README.md docs
