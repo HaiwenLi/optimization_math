@@ -30,6 +30,11 @@ def compute_certificate(A, y, x, lam, *, mu=0.0, b=None, stage=0, iteration=0):
     b_vec = np.zeros_like(y) if b is None else _vector(b, "b")
     if y.shape != (op.shape[0],) or b_vec.shape != y.shape or x.shape != (op.shape[1],):
         raise ValueError("Certificate vector shapes do not match the operator")
+    try:
+        lam = float(lam)
+        mu = float(mu)
+    except (TypeError, ValueError):
+        raise ValueError("lam must be positive and mu must be nonnegative") from None
     if not np.isfinite(lam) or not np.isfinite(mu) or lam <= 0 or mu < 0:
         raise ValueError("lam must be positive and mu must be nonnegative")
     if np.any(x < 0):

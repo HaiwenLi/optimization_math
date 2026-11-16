@@ -32,6 +32,17 @@ def test_certificate_rejects_negative_primal_iterate():
         )
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"lam": None}, {"lam": "bad"}, {"lam": 0.5, "mu": "auto"}, {"lam": 0.5, "mu": None}],
+)
+def test_certificate_rejects_nonnumeric_regularization_with_value_error(kwargs):
+    call = dict(A=np.array([[1.0]]), y=np.array([1.0]), x=np.array([0.5]))
+    call.update(kwargs)
+    with pytest.raises(ValueError, match="lam must be positive"):
+        compute_certificate(**call)
+
+
 def test_nontrivial_iterate_has_feasible_dual_lower_bound():
     cert = compute_certificate(
         np.array([[1.0, 0.5], [0.2, -1.0]]),

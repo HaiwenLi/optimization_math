@@ -55,6 +55,8 @@ print(result.certificate.kkt_residual, result.certificate.relative_gap)
 6.476165656835956e-06 9.430809100041682e-07
 ```
 
+> 注：示例中的具体数字可能因 NumPy/BLAS 平台与版本不同而略有差异；验收标准是基于容差的断言（`kkt_residual <= kkt_tol`、`relative_gap <= gap_tol`），而非逐位复现输出。
+
 - `status` 只有在最终 λ 阶段同时满足 `kkt_residual <= kkt_tol` 与 `relative_gap <= gap_tol` 时才为 `"converged"`；达到 `max_iter` 时如实返回 `"max_iter"`，不以目标下降冒充收敛。
 - 证书按 `certificate_stride` 间隔与最终迭代点评估，并非每步免费产出：加速 FISTA 在动量点计算梯度，接受迭代点的证书需要额外一对 `A/Aᵀ`（ISTA 的当前点梯度可直接复用）。
 - 弹性网（`mu > 0`）、已知背景 `b`、显式 `lipschitz`、回溯与自适应重启等完整参数见 `solve_fista` 签名；黑盒算子只需实现 `shape` / `matvec` / `rmatvec`。

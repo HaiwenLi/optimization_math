@@ -200,3 +200,26 @@ def test_lambda_path_must_be_strictly_decreasing_and_end_at_target():
     for path in ([2.0, 1.0, 1.0, 0.5], [2.0, 1.0]):
         with pytest.raises(ValueError, match="lambda_path"):
             solve_fista(np.array([[1.0]]), np.array([2.0]), 0.5, lambda_path=path)
+
+
+@pytest.mark.parametrize("path", [5.0, object()])
+def test_fista_rejects_non_iterable_lambda_path_with_value_error(path):
+    with pytest.raises(ValueError, match="lambda_path"):
+        solve_fista(np.array([[1.0]]), np.array([2.0]), 0.5, lambda_path=path)
+
+
+@pytest.mark.parametrize("element", [None, "bad", object()])
+def test_fista_rejects_non_floatable_lambda_path_elements_with_value_error(element):
+    with pytest.raises(ValueError, match="lambda_path"):
+        solve_fista(
+            np.array([[1.0]]), np.array([2.0]), 0.5, lambda_path=[element, 0.5]
+        )
+
+
+@pytest.mark.parametrize("scale", ["bad", None, 0.5, 0.999])
+def test_fista_rejects_invalid_continuation_tol_scale_with_value_error(scale):
+    with pytest.raises(ValueError, match="continuation_tol_scale"):
+        solve_fista(
+            np.array([[1.0]]), np.array([2.0]), 0.5,
+            continuation_tol_scale=scale,
+        )

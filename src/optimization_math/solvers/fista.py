@@ -100,6 +100,9 @@ def _gradient_restart_needed(grad, x_new, x_anchor):
 
 
 def _backtracked_prox(op, y, b_vec, z, grad, L, lam, mu, enabled, f_z):
+    # Recovery envelope: L may double at most 60 times per call (growth cap ~2**60),
+    # so a supplied `lipschitz` more than about 2**60 below the stable value exhausts
+    # the budget and raises FloatingPointError rather than looping forever.
     for _ in range(60):
         x_new = _nonnegative_elastic_net_prox(z - grad / L, step=1.0 / L, lam=lam, mu=mu)
         if not enabled:
@@ -182,12 +185,19 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
 
     op = as_linear_operator(A)
     y, b_vec, x, lam, mu = _validate_common(op, y, lam, mu, b, x0)
-    path = [float(lam)] if lambda_path is None else [float(v) for v in lambda_path]
+    try:
+        path = [float(lam)] if lambda_path is None else [float(v) for v in lambda_path]
+    except (TypeError, ValueError):
+        raise ValueError("lambda_path must be an iterable of positive finite numbers") from None
     if (not path or path[-1] != lam or any(not np.isfinite(v) or v <= 0 for v in path)
             or any(path[i] <= path[i + 1] for i in range(len(path) - 1))):
         raise ValueError("lambda_path must be positive, strictly decreasing, and end at lam")
-    if continuation_tol_scale < 1.0:
-        raise ValueError("continuation_tol_scale must be at least one")
+    try:
+        continuation_tol_scale = float(continuation_tol_scale)
+    except (TypeError, ValueError):
+        raise ValueError("continuation_tol_scale must be a finite number of at least one") from None
+    if not np.isfinite(continuation_tol_scale) or continuation_tol_scale < 1.0:
+        raise ValueError("continuation_tol_scale must be a finite number of at least one")
 
     L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
         op, power_iter=power_iter, power_tol=power_tol
