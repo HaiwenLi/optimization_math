@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from optimization_math.certificates import compute_certificate
 from optimization_math.solvers.fista import (
     _nonnegative_elastic_net_prox,
     lambda_max,
@@ -113,3 +114,69 @@ def test_fista_rejects_invalid_shapes_nonfinite_data_and_controls(overrides):
     kwargs.update(overrides)
     with pytest.raises(ValueError):
         solve_fista(**kwargs)
+
+
+def test_fista_momentum_accelerates_beyond_plain_ista():
+    rng = np.random.default_rng(11)
+    u, _ = np.linalg.qr(rng.standard_normal((40, 20)))
+    v, _ = np.linalg.qr(rng.standard_normal((20, 20)))
+    s = np.logspace(3, 0, 20)
+    A = (u * s) @ v.T
+    y = A @ rng.random(20) + 0.05 * rng.standard_normal(40)
+    lam = 0.05 * np.linalg.norm(A.T @ y, ord=np.inf)
+    lipschitz = float(s[0] ** 2)
+    kkt_tol, gap_tol = 1e-6, 1e-7
+
+    def plain_ista_iterations():
+        x = np.zeros(20)
+        for k in range(1, 20000):
+            grad = A.T @ (A @ x - y)
+            x = _nonnegative_elastic_net_prox(
+                x - grad / lipschitz, step=1.0 / lipschitz, lam=lam, mu=0.0
+            )
+            cert = compute_certificate(A, y, x, lam, stage=0, iteration=k)
+            if cert.kkt_residual <= kkt_tol and cert.relative_gap <= gap_tol:
+                return k
+        raise AssertionError("plain ISTA reference did not converge")
+
+    result = solve_fista(
+        A, y, lam, lipschitz=lipschitz, restart=False, backtracking=False,
+        certificate_stride=1, kkt_tol=kkt_tol, gap_tol=gap_tol, max_iter=20000,
+    )
+    assert result.status == "converged"
+    assert result.iterations < 0.5 * plain_ista_iterations()
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"lam": None}, {"lam": [0.5]}, {"lam": 0.1, "mu": "auto"}]
+)
+def test_fista_rejects_nonnumeric_regularization_with_value_error(kwargs):
+    with pytest.raises(ValueError):
+        solve_fista(np.array([[1.0]]), np.array([1.0]), **kwargs)
+
+
+def test_backtracking_recovers_from_underestimated_lipschitz():
+    result = solve_fista(
+        np.eye(2), np.array([2.0, -1.0]), 0.5,
+        lipschitz=1e-8, backtracking=True,
+        certificate_stride=1, kkt_tol=1e-7, gap_tol=1e-8,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [1.5, 0.0], atol=1e-6)
+    assert result.lipschitz >= 0.5
+
+
+def test_gradient_restart_predicate_matches_sign_rule():
+    from optimization_math.solvers.fista import _gradient_restart_needed
+    assert _gradient_restart_needed(np.array([1.0]), np.array([1.0]), np.array([0.0]))
+    assert not _gradient_restart_needed(np.array([1.0]), np.array([-1.0]), np.array([0.0]))
+
+
+def test_restarted_fista_converges_on_correlated_operator():
+    A = np.array([[1.0, 1.0], [1.0, 1.01]])
+    result = solve_fista(
+        A, np.array([1.0, 2.0]), 0.1, restart=True,
+        certificate_stride=1, kkt_tol=1e-6, gap_tol=1e-6, max_iter=3000,
+    )
+    assert result.status == "converged"
+    assert np.all(result.x >= 0)

@@ -85,14 +85,40 @@ def _validate_common(op, y, lam, mu, b, x0):
         raise ValueError("x0 must match the operator input dimension")
     if np.any(x < 0):
         raise ValueError("x0 must be nonnegative")
+    try:
+        lam = float(lam)
+        mu = float(mu)
+    except (TypeError, ValueError):
+        raise ValueError("lam must be positive and mu must be nonnegative") from None
     if not np.isfinite(lam) or not np.isfinite(mu) or lam <= 0 or mu < 0:
         raise ValueError("lam must be positive and mu must be nonnegative")
-    return y, b_vec, x
+    return y, b_vec, x, lam, mu
+
+
+def _gradient_restart_needed(grad, x_new, x_anchor):
+    return bool(np.dot(grad, x_new - x_anchor) > 0.0)
+
+
+def _backtracked_prox(op, y, b_vec, z, grad, L, lam, mu, enabled, f_z):
+    for _ in range(60):
+        x_new = _nonnegative_elastic_net_prox(z - grad / L, step=1.0 / L, lam=lam, mu=mu)
+        if not enabled:
+            return x_new, L
+        delta = x_new - z
+        r_new = op.matvec(x_new) + b_vec - y
+        f_new = 0.5 * np.dot(r_new, r_new)
+        upper = f_z + np.dot(grad, delta) + 0.5 * L * np.dot(delta, delta)
+        tolerance = 1e-12 * max(1.0, abs(f_z), abs(upper))
+        if f_new <= upper + tolerance:
+            return x_new, L
+        L *= 2.0
+    raise FloatingPointError("Backtracking failed to find a finite stable step")
 
 
 def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
                 max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
-                certificate_stride=10, power_iter=50, power_tol=1e-6):
+                certificate_stride=10, power_iter=50, power_tol=1e-6,
+                restart=True, backtracking=True):
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     power_iter = _positive_int(power_iter, "power_iter")
@@ -103,12 +129,13 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
         lipschitz = _positive_float(lipschitz, "lipschitz")
 
     op = as_linear_operator(A)
-    y, b_vec, x = _validate_common(op, y, lam, mu, b, x0)
+    y, b_vec, x, lam, mu = _validate_common(op, y, lam, mu, b, x0)
     L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
         op, power_iter=power_iter, power_tol=power_tol
     )
     z = x.copy()
     momentum = 1.0
+    restart_count = 0
     history = [compute_certificate(op, y, x, lam, mu=mu, b=b_vec, stage=0, iteration=0)]
     status = "max_iter"
     iterations = 0
@@ -119,9 +146,23 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
         for k in range(1, max_iter + 1):
             r_z = op.matvec(z) + b_vec - y
             grad = op.rmatvec(r_z)
-            x_new = _nonnegative_elastic_net_prox(z - grad / L, step=1.0 / L, lam=lam, mu=mu)
+            x_new, L = _backtracked_prox(
+                op, y, b_vec, z, grad, L, lam, mu, backtracking, 0.5 * np.dot(r_z, r_z)
+            )
             if not np.all(np.isfinite(x_new)):
                 raise FloatingPointError("FISTA produced a non-finite iterate")
+
+            if restart and _gradient_restart_needed(grad, x_new, x):
+                r_x = op.matvec(x) + b_vec - y
+                grad_x = op.rmatvec(r_x)
+                x_new, L = _backtracked_prox(
+                    op, y, b_vec, x, grad_x, L, lam, mu, backtracking,
+                    0.5 * np.dot(r_x, r_x),
+                )
+                if not np.all(np.isfinite(x_new)):
+                    raise FloatingPointError("FISTA produced a non-finite iterate")
+                momentum = 1.0
+                restart_count += 1
 
             if k % certificate_stride == 0 or k == max_iter:
                 cert = compute_certificate(op, y, x_new, lam, mu=mu, b=b_vec, stage=0, iteration=k)
@@ -138,4 +179,4 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
             momentum = next_momentum
             iterations = k
 
-    return FistaResult(x, status, iterations, iterations, L, 0, history[-1], tuple(history))
+    return FistaResult(x, status, iterations, iterations, L, restart_count, history[-1], tuple(history))
