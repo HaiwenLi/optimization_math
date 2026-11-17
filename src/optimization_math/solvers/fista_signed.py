@@ -6,7 +6,12 @@ import numpy as np
 from optimization_math.certificates import Certificate, _vector
 from optimization_math.certificates_signed import compute_certificate_signed
 from optimization_math.operators import as_linear_operator
-from optimization_math.solvers._common import _estimate_lipschitz, _positive_float, _positive_int
+from optimization_math.solvers._common import (
+    _estimate_lipschitz,
+    _positive_float,
+    _positive_int,
+    _soft_threshold_prox,
+)
 
 
 @dataclass(frozen=True)
@@ -19,11 +24,6 @@ class FistaSignedResult:
     restart_count: int
     certificate: Certificate
     history: tuple[Certificate, ...]
-
-
-def _soft_threshold_prox(z, *, step, lam, mu):
-    magnitude = np.maximum(np.abs(z) - step * lam, 0.0)
-    return np.sign(z) * magnitude / (1.0 + step * mu)
 
 
 def lambda_max_signed(A, y, *, b=None):

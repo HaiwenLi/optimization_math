@@ -36,7 +36,7 @@ def _estimate_nuclear_lipschitz(A, shape, *, power_iter=50):
         W /= norm
         est = float(np.dot(W.ravel(), A.rmatvec(A.matvec(W)).ravel()))
         X = W
-    return max(est, np.finfo(np.float64).tiny)
+    return max(est, np.finfo(np.float64).tiny) * 1.05
 
 
 def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=None,
@@ -54,7 +54,16 @@ def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=None,
     y = np.asarray(y, dtype=np.float64)
     shape = A.shape  # expects A.shape to expose the matrix shape mapping
     X = np.zeros(shape) if X0 is None else np.asarray(X0, dtype=np.float64).copy()
-    lam = float(lam)
+    try:
+        lam = float(lam)
+    except (TypeError, ValueError):
+        raise ValueError("lam must be a positive number") from None
+    if not np.isfinite(lam) or lam <= 0:
+        raise ValueError("lam must be a positive number")
+    if y.ndim != 1 or not np.all(np.isfinite(y)):
+        raise ValueError("y must be a finite 1D vector")
+    if not np.all(np.isfinite(X)):
+        raise ValueError("X0 must be finite")
 
     L = float(lipschitz) if lipschitz is not None else _estimate_nuclear_lipschitz(
         A, shape, power_iter=power_iter

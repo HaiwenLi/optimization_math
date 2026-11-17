@@ -9,8 +9,7 @@ from optimization_math.certificates_logistic import (
     _sigmoid,
     compute_certificate_logistic,
 )
-from optimization_math.solvers._common import _positive_float, _positive_int
-from optimization_math.solvers.fista_signed import _soft_threshold_prox
+from optimization_math.solvers._common import _positive_float, _positive_int, _soft_threshold_prox
 
 
 @dataclass(frozen=True)

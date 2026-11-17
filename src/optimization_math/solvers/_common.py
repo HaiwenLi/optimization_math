@@ -21,6 +21,12 @@ def _positive_float(value, name):
     return out
 
 
+def _soft_threshold_prox(z, *, step, lam, mu):
+    """Soft-threshold proximity operator: sign(z) max(|z|-step*lam, 0) / (1+step*mu)."""
+    magnitude = np.maximum(np.abs(z) - step * lam, 0.0)
+    return np.sign(z) * magnitude / (1.0 + step * mu)
+
+
 def _estimate_lipschitz(op, *, power_iter, power_tol):
     rng = np.random.default_rng(0)
     v = rng.standard_normal(op.shape[1])
@@ -38,7 +44,9 @@ def _estimate_lipschitz(op, *, power_iter, power_tol):
             break
         estimate = new_estimate
         v = w
-    return max(estimate, np.finfo(np.float64).tiny)
+    # Rayleigh quotient converges to ||A||^2 from below; inflate to stay >= the
+    # true Lipschitz constant (projected-gradient/FISTA need L >= ||A||^2).
+    return max(estimate, np.finfo(np.float64).tiny) * 1.05
 
 
 def _validate_common(op, y, lam, mu, b, x0):

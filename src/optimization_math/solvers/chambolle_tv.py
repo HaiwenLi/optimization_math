@@ -5,6 +5,7 @@ import numpy as np
 
 from optimization_math.certificates import Certificate
 from optimization_math.operators_difference import first_difference_operator
+from optimization_math.solvers._common import _positive_float, _positive_int
 
 
 @dataclass(frozen=True)
@@ -38,12 +39,17 @@ def certificate_tv_chambolle(D, y, x, lam_tv, p):
 
 def solve_tv_chambolle(y, lam_tv, *, tau=None, tol=1e-5, max_iter=5000):
     """Chambolle-projection TV denoiser with certificate-gated convergence."""
+    max_iter = _positive_int(max_iter, "max_iter")
+    tol = _positive_float(tol, "tol")
     y = np.asarray(y, dtype=np.float64)
     if y.ndim != 1:
         raise ValueError("y must be 1D")
     if not np.all(np.isfinite(y)):
         raise ValueError("y must be finite")
-    lam_tv = float(lam_tv)
+    try:
+        lam_tv = float(lam_tv)
+    except (TypeError, ValueError):
+        raise ValueError("lam_tv must be a nonnegative number") from None
     if not np.isfinite(lam_tv) or lam_tv < 0:
         raise ValueError("lam_tv must be nonnegative")
     n = y.shape[0]

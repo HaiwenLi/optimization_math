@@ -7,6 +7,8 @@ import numpy as np
 def _group_slices(groups):
     """Normalize groups (list of coordinate arrays) into a list of int arrays."""
     out = [np.asarray(g, dtype=np.intp) for g in groups]
+    if len(out) == 0:
+        raise ValueError("groups must be a nonempty list of index arrays")
     if any(g.ndim != 1 or g.size == 0 for g in out):
         raise ValueError("groups must be a list of nonempty index arrays")
     return out
@@ -26,6 +28,8 @@ def compute_certificate_group(A, y, x, lam, groups, *, mu=0.0, b=None, stage=0, 
     n = x.shape[0]
     if y.shape != (op.shape[0],) or x.shape != (op.shape[1],) or b_vec.shape != y.shape:
         raise ValueError("A, y, x, b shapes do not match")
+    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(x)) or not np.all(np.isfinite(b_vec)):
+        raise ValueError("A, y, x, b must be finite")
     lam = float(lam)
     mu = float(mu)
     if not np.isfinite(lam) or lam <= 0 or not np.isfinite(mu) or mu < 0:

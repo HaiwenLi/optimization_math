@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 from optimization_math.certificates_signed import compute_certificate_signed
+from optimization_math.solvers._common import _soft_threshold_prox
 from optimization_math.solvers.fista_signed import (
-    _soft_threshold_prox,
     lambda_max_signed,
     solve_fista_signed,
 )

@@ -49,7 +49,6 @@ def run_solver(name, fn, A, y, lam, x_true, *, matvec_per_iter):
     number of A/A^T pairs per iteration for the cost column."""
     result = fn(A, y, lam)
     from benchmarks.metrics import recovery_metrics as rm
-    objective = None
     objective = result.certificate.primal
     return RunResult(
         solver=name,

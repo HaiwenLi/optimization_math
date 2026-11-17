@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from optimization_math.solvers.fista_group import solve_fista_group
-from optimization_math.solvers.fista import solve_fista  # plain LASSO (nonneg off)
+from optimization_math.solvers.fista_signed import solve_fista_signed  # plain (signed) LASSO reference
 from optimization_math.solvers.fista_nuclear import solve_fista_nuclear
 from optimization_math.certificates_nuclear import soft_threshold_singular
 
@@ -54,9 +54,9 @@ def benchmark_group(seed=0):
 
     r_group = solve_fista_group(A, y, lam, groups, lipschitz=L,
                                 certificate_stride=1, kkt_tol=1e-5, gap_tol=1e-5, max_iter=20000)
-    # Plain LASSO reference at a comparable lambda (per-coordinate l1).
-    r_plain = solve_fista(A, y, lam, lipschitz=L,
-                          certificate_stride=1, kkt_tol=1e-5, gap_tol=1e-5, max_iter=20000)
+    # Plain (signed) LASSO reference at a comparable lambda (per-coordinate l1).
+    r_plain = solve_fista_signed(A, y, lam, lipschitz=L,
+                                 certificate_stride=1, kkt_tol=1e-5, gap_tol=1e-5, max_iter=20000)
     return {
         "group": {
             "status": r_group.status,
@@ -93,7 +93,7 @@ def benchmark_nuclear(seed=0):
         rank = int(np.sum(np.linalg.svd(r.X, compute_uv=False) > 1e-6))
         if best_err is None or err < best_err:
             best_err, best_lam, best_rank = err, lam, rank
-        if rank <= 4 and lam not in rank_recovered_at:
+        if rank == 3 and lam not in rank_recovered_at:  # exact rank-3 recovery
             rank_recovered_at[lam] = True
     return {
         "noise": noise,

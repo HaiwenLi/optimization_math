@@ -51,39 +51,39 @@ def run_solver(name, X, y, w_true, lam):
 
 
 def benchmark_logistic(seeds=(0, 1, 2), lams=(0.05, 0.02, 0.01)):
-    rows = []
+    """Return a list of (lam, RunResult) tuples (structured, no string parsing)."""
+    out = []
     for lam in lams:
         for seed in seeds:
             X, y, w_true = make_problem(seed)
-            rows.append(run_solver(f"fista-logistic(λ={lam})", X, y, w_true, lam))
-    return rows
+            out.append((lam, run_solver(f"fista-logistic(λ={lam})", X, y, w_true, lam)))
+    return out
 
 
 def main():
     OUT_DIR.mkdir(exist_ok=True)
-    rows = benchmark_logistic()
+    pairs = benchmark_logistic()
     print("T2 sparse logistic benchmark:")
     from benchmarks.metrics import MARKDOWN_HEADER
     print(MARKDOWN_HEADER)
-    for r in rows:
+    for _, r in pairs:
         print(format_row(r))
 
-    _plot(rows)
-    _write_report(rows)
+    _plot(pairs)
+    _write_report(pairs)
 
 
-def _plot(rows):
+def _plot(pairs):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    lams = sorted({float(r.solver.split("=")[1].rstrip(")")) for r in rows})
+    lams = sorted({lam for lam, _ in pairs})
     fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
-    # Group by lambda and plot F1 and iterations.
-    by_lam = {}
-    for r in rows:
-        lam = float(r.solver.split("=")[1].rstrip(")"))
-        by_lam.setdefault(lam, []).append(r)
+    # Group by lambda and plot F1 and iterations (structured, no string parsing).
+    by_lam = {lam: [] for lam in lams}
+    for lam, r in pairs:
+        by_lam[lam].append(r)
     f1_mean = [np.mean([r.recovery.support_f1 for r in by_lam[l]]) for l in lams]
     f1_std = [np.std([r.recovery.support_f1 for r in by_lam[l]]) for l in lams]
     it_mean = [np.mean([r.iterations for r in by_lam[l]]) for l in lams]
@@ -101,7 +101,7 @@ def _plot(rows):
     plt.close(fig)
 
 
-def _write_report(rows):
+def _write_report(pairs):
     from benchmarks.metrics import MARKDOWN_HEADER
     lines = [
         "# T2 稀疏 logistic 回归基准报告",
@@ -111,7 +111,7 @@ def _write_report(rows):
         "",
         MARKDOWN_HEADER,
     ]
-    for r in rows:
+    for _, r in pairs:
         lines.append(format_row(r))
     lines += [
         "",

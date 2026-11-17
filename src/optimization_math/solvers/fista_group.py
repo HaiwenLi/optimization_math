@@ -47,14 +47,23 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
     b_vec = np.zeros_like(y) if b is None else np.asarray(b, dtype=np.float64)
     if y.ndim != 1 or y.shape != (op.shape[0],) or b_vec.shape != y.shape:
         raise ValueError("y and b must match the operator output dimension")
+    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(b_vec)):
+        raise ValueError("y and b must be finite")
     waves = _normalize_groups(groups, op.shape[1])
     n = op.shape[1]
 
     x = np.zeros(n) if x0 is None else np.asarray(x0, dtype=np.float64).copy()
     if x.shape != (n,):
         raise ValueError("x0 must match the operator input dimension")
-    lam = float(lam)
-    mu = float(mu)
+    if not np.all(np.isfinite(x)):
+        raise ValueError("x0 must be finite")
+    try:
+        lam = float(lam)
+        mu = float(mu)
+    except (TypeError, ValueError):
+        raise ValueError("lam must be positive and mu must be nonnegative") from None
+    if not np.isfinite(lam) or not np.isfinite(mu) or lam <= 0 or mu < 0:
+        raise ValueError("lam must be positive and mu must be nonnegative")
 
     L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
         op, power_iter=power_iter, power_tol=power_tol
@@ -106,9 +115,11 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
 
 def _normalize_groups(groups, n):
     out = [np.asarray(g, dtype=np.intp) for g in groups]
+    if len(out) == 0:
+        raise ValueError("groups must be a nonempty list of index arrays")
     if any(g.ndim != 1 or g.size == 0 for g in out):
         raise ValueError("groups must be a list of nonempty index arrays")
-    all_idx = np.concatenate(out) if out else np.array([], dtype=np.intp)
+    all_idx = np.concatenate(out)
     if all_idx.size and (all_idx.min() < 0 or all_idx.max() >= n):
         raise ValueError("group indices out of range")
     return out

@@ -35,16 +35,7 @@ x - y + \lambda_{\rm sp} v_x + D^T \nu = 0, & v_x \in \partial\|x\|_1,\\
 \end{cases}
 \]
 
-**归一化 KKT 违反度**（工程口径，对 x 的次梯度做归一）：
-
-\[
-g = (x-y) + \lambda_{\rm sp} v_x + \lambda_{\rm tv} D^T \operatorname{sign}(Dx),
-\qquad
-\varepsilon_{\rm KKT} = \frac{\max_{i} \operatorname{dist}(g_i,\ \ldots)}
-{\max(1,\|g\|_\infty)}.
-\]
-
-具体地：对 `x_i ≠ 0` 要求 `g_i = 0`（sparsity 的 active 分量被 `sign(x_i)` 吸收），对 `x_i = 0` 要求 `|(x-y)_i + λ_tv(Dᵀ sign(Dx))_i| ≤ λ_sp`。实现按此分支直接计算最大化违反度并归一化。
+**实现口径（原始-对偶 gap 作为唯一最优性度量）**：纯 TV（`λ_sp=0`）下，若用「`g=(x−y)+λ_tv Dᵀsign(Dx)` 的范数」当 KKT 残差，会在平台区（`Dx=0`，`sign(0)=0` 不是正确的次梯度内点）处永远不归零。故本类**不实现半吊子的 KKT 残差**，而是用 §2.2 的原始-对偶（Fenchel）间隙作为唯一收敛凭证：`gap→0 ⇔ x` 最优。代码中 `Certificate.kkt_residual` 字段承载**绝对原始-对偶间隙**（`primal − dual`），随收敛单调下降至 0，其语义在 `chambolle_tv.py` 的 docstring 中明确标注。
 
 ### 2.2 对偶与原始-对偶间隙（Chambolle）
 

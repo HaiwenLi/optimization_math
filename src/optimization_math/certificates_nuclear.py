@@ -21,6 +21,14 @@ def compute_certificate_nuclear(A, y, X, lam, *, stage=0, iteration=0):
     X = np.asarray(X, dtype=np.float64)
     if X.ndim != 2:
         raise ValueError("X must be a 2D matrix")
+    try:
+        lam = float(lam)
+    except (TypeError, ValueError):
+        raise ValueError("lam must be a positive number") from None
+    if not np.isfinite(lam) or lam <= 0:
+        raise ValueError("lam must be a positive number")
+    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(X)):
+        raise ValueError("y and X must be finite")
     r = A.matvec(X) - y
     grad = A.rmatvec(r)
     primal = 0.5 * np.dot(r, r) + lam * np.sum(np.linalg.svd(X, compute_uv=False))

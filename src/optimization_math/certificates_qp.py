@@ -63,5 +63,8 @@ def compute_certificate_qp(Q, c, x, l, u, *, stage=0, iteration=0):
     comp_gap = max(comp_gap, 0.0)
     gap = comp_gap / max(1.0, abs(primal), abs(primal - comp_gap))
 
+    # Certificate.lam carries the l1 penalty weight; box-QP has none, so 0.0
+    # signals "no sparsity term". The `relative_gap` field carries the normalized
+    # complementarity gap (a valid optimality bound under strong duality).
     return Certificate(stage, iteration, 0.0,
                        float(primal), float(primal - comp_gap), float(kkt), gap)
