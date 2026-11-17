@@ -61,12 +61,32 @@ print(result.certificate.kkt_residual, result.certificate.relative_gap)
 - 证书按 `certificate_stride` 间隔与最终迭代点评估，并非每步免费产出：加速 FISTA 在动量点计算梯度，接受迭代点的证书需要额外一对 `A/Aᵀ`（ISTA 的当前点梯度可直接复用）。
 - 弹性网（`mu > 0`）、已知背景 `b`、显式 `lipschitz`、回溯与自适应重启等完整参数见 `solve_fista` 签名；黑盒算子只需实现 `shape` / `matvec` / `rmatvec`。
 
+### 三分裂 ADMM
+
+```python
+import numpy as np
+from optimization_math.solvers.admm import solve_admm
+
+A = np.array([[1.0, 1.0], [0.0, 1.0]])
+y = np.array([2.0, 1.0])
+result = solve_admm(A, y, 0.1, rho=1.0, certificate_stride=10)
+assert result.status == "converged"
+assert result.certificate.kkt_residual <= 1e-5
+assert result.certificate.relative_gap <= 1e-4
+print(result.status)
+print(result.x)
+```
+
+- 三分裂：`x` 承载数据项与弹性网二次项、`z` 承载非负 + L1、约束 `x=z`；`x` 步用黑盒 CG 求解 `(AᵀA+(μ+ρ)I)x = Aᵀ(y-b)+ρ(z-u)`，不组装 `AᵀA`。
+- `result.x` 返回非负 `z`；证书在 `z` 上复用与 FISTA 相同的 `compute_certificate`。收敛要求归一化原始/对偶残差与 `kkt_residual ≤ kkt_tol`、`relative_gap ≤ gap_tol` **同时**满足，残差缩小、CG 收敛或 `max_iter` 都不单独判定收敛。
+- 本轮实现覆盖**已知背景 `b`** 的核心三分裂 ADMM；背景块 `B c` 联合估计作为后续独立工作另行规格化。
+
 ## 求解器路线图
 
 | 优先级 | 求解器 | 说明 |
 |---|---|---|
 | P0 | 非负 FISTA（已实现） | 加速 + 自适应重启 + 回溯 + λ 延拓暖启动；证书按可配置间隔与最终迭代点评估 |
-| P0 | 三分裂 ADMM（split Bregman） | CG+FFT 内层；z 步非负闭式；支持背景块联合估计 |
+| P0 | 三分裂 ADMM（已实现·已知 b） | 黑盒 CG 内层；z 步非负闭式；可选自适应 ρ；背景块联合估计待单独规格 |
 | P1 | 工作列贪心 | 支撑定位器；与上两者互供 warm start；终检 KKT 通过即全局最优 |
 | P2 | 小算例 ground truth | LARS / l1_ls / glmnet 在降采样算例上三方对照 |
 
@@ -87,6 +107,8 @@ optimization_math/
 │   ├── operators.py                 # 带形状检查的线性算子接口
 │   ├── certificates.py              # 投影 KKT + 相对对偶间隙证书
 │   └── solvers/
+│       ├── _common.py               # 共享校验助手（私有）
+│       ├── admm.py                  # 三分裂 ADMM（黑盒 CG 内层 / 自适应 ρ）
 │       └── fista.py                 # 非负 FISTA（回溯 / 重启 / λ 延拓）
 └── tests/                           # 含证书断言的测试
 ```
@@ -96,6 +118,8 @@ optimization_math/
 - [L1/L2 求解算法调研（2026-11-13）](docs/survey/2026-11-13-L1-L2-稀疏求解算法调研.md) — 11 类算法族、统一收敛证书推导、算法对比总表、43 条可核验文献、P0/P1/P2 选型建议
 - [非负 FISTA P0 设计规格（2026-11-15）](docs/superpowers/specs/2026-11-15-nonnegative-fista-design.md) — 接口、算法、证书与错误处理的完整设计
 - [实施计划（2026-11-15）](docs/superpowers/plans/2026-11-15-nonnegative-fista.md) — TDD 任务分解与验收记录
+- [三分裂 ADMM 核心设计规格（2026-11-16）](docs/superpowers/specs/2026-11-16-three-split-admm-design.md) — 已知背景 b 的 ADMM / split Bregman 同族核心求解器设计
+- [实施计划（2026-11-16）](docs/superpowers/plans/2026-11-16-three-split-admm.md) — TDD 任务分解与验收记录
 
 ## 约定
 

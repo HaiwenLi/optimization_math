@@ -209,3 +209,24 @@ def test_admm_rejects_invalid_adaptive_rho_controls(overrides):
     kwargs.update(overrides)
     with pytest.raises(ValueError):
         solve_admm(**kwargs)
+
+
+def test_admm_matches_fista_objective_on_deterministic_small_problem():
+    from optimization_math.solvers.fista import solve_fista
+    A = np.array([[1.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 0.0, 1.0]])
+    y = np.array([2.0, 1.0, 1.5])
+    lam, mu = 0.2, 0.1
+    admm = solve_admm(
+        A, y, lam, mu=mu, rho=1.0, cg_tol=1e-12, residual_tol=1e-7,
+        certificate_stride=1, kkt_tol=1e-8, gap_tol=1e-9, max_iter=1000,
+    )
+    fista = solve_fista(
+        A, y, lam, mu=mu, certificate_stride=1,
+        kkt_tol=1e-8, gap_tol=1e-9, max_iter=5000,
+    )
+    assert admm.status == fista.status == "converged"
+    assert admm.certificate.relative_gap <= 1e-9
+    assert fista.certificate.relative_gap <= 1e-9
+    assert abs(admm.certificate.primal - fista.certificate.primal) <= 1e-8 * max(
+        1.0, abs(fista.certificate.primal)
+    )

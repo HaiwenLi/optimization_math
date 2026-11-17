@@ -508,7 +508,7 @@ Run: `python -m pytest tests/test_admm.py -q`
 Expected: all `test_admm.py` tests pass
 
 Run: `python -m pytest -q`
-Expected: `65 passed`
+Expected: `66 passed`
 
 - [ ] **Step 3: Commit**
 
@@ -626,7 +626,7 @@ Run: `python -m pytest tests/test_admm.py -q`
 Expected: all `test_admm.py` tests pass
 
 Run: `python -m pytest -q`
-Expected: `75 passed`
+Expected: `76 passed`
 
 - [ ] **Step 3: Commit**
 
@@ -706,7 +706,7 @@ In `docs/survey/2026-11-13-L1-L2-稀疏求解算法调研.md`, adjust the P0 ADM
 - [ ] **Step 4: Run final verification**
 
 Run: `python -m pytest -q`
-Expected: `76 passed`
+Expected: `77 passed`
 
 Run the README ADMM example exactly as written and confirm it prints `converged` with both certificate tolerances satisfied.
 
