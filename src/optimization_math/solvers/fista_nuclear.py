@@ -22,14 +22,33 @@ class FistaNuclearResult:
     history: tuple[Certificate, ...]
 
 
-def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=1.0,
+def _estimate_nuclear_lipschitz(A, shape, *, power_iter=50):
+    """Estimate ||A||_2^2 for the matrix-valued operator via power iteration."""
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal(shape)
+    X /= np.linalg.norm(X)
+    est = 0.0
+    for _ in range(power_iter):
+        W = A.rmatvec(A.matvec(X))
+        norm = np.linalg.norm(W)
+        if norm == 0:
+            return 1.0
+        W /= norm
+        est = float(np.dot(W.ravel(), A.rmatvec(A.matvec(W)).ravel()))
+        X = W
+    return max(est, np.finfo(np.float64).tiny)
+
+
+def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=None,
                         max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
-                        certificate_stride=10, restart=True):
+                        certificate_stride=10, restart=True, power_iter=50):
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
+    power_iter = _positive_int(power_iter, "power_iter")
     kkt_tol = _positive_float(kkt_tol, "kkt_tol")
     gap_tol = _positive_float(gap_tol, "gap_tol")
-    lipschitz = _positive_float(lipschitz, "lipschitz")
+    if lipschitz is not None:
+        lipschitz = _positive_float(lipschitz, "lipschitz")
 
     A = as_matrix_operator(A)
     y = np.asarray(y, dtype=np.float64)
@@ -37,7 +56,9 @@ def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=1.0,
     X = np.zeros(shape) if X0 is None else np.asarray(X0, dtype=np.float64).copy()
     lam = float(lam)
 
-    L = lipschitz
+    L = float(lipschitz) if lipschitz is not None else _estimate_nuclear_lipschitz(
+        A, shape, power_iter=power_iter
+    )
     Z = X.copy()
     momentum = 1.0
     history = [compute_certificate_nuclear(A, y, X, lam, stage=0, iteration=0)]

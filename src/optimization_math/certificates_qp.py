@@ -30,17 +30,21 @@ def compute_certificate_qp(Q, c, x, l, u, *, stage=0, iteration=0):
         raise ValueError("l and u must match Q's dimension")
     if np.any(l > u):
         raise ValueError("l must be <= u")
+    if np.any(x < l) or np.any(x > u):
+        raise ValueError("x must be inside the box [l, u]")
 
     g = Q @ x + c
 
     # KKT violations, coordinate-wise.
     viol = np.zeros(n)
-    interior = (x > l) & (x < u)
-    lower = x <= l + 1e-12
-    upper = x >= u - 1e-12
+    fixed = (u - l) <= 1e-12          # equality-constrained coordinate: g_i free
+    interior = (x > l) & (x < u) & ~fixed
+    lower = (x <= l + 1e-12) & ~fixed
+    upper = (x >= u - 1e-12) & ~fixed
     viol[interior] = np.abs(g[interior])
     viol[lower] = np.maximum(0.0, -g[lower])
     viol[upper] = np.maximum(0.0, g[upper])
+    # fixed coordinates: viol stays 0 (multiplier free)
     kkt = float(np.max(viol) / max(1.0, np.linalg.norm(g, ord=np.inf)))
 
     primal = 0.5 * np.dot(x, Q @ x) + np.dot(c, x)
@@ -57,7 +61,7 @@ def compute_certificate_qp(Q, c, x, l, u, *, stage=0, iteration=0):
     # stationarity anyway (g would need to be ±inf), so the above is safe; still
     # clip to nonnegative for roundoff.
     comp_gap = max(comp_gap, 0.0)
-    gap = comp_gap / max(1.0, abs(primal))
+    gap = comp_gap / max(1.0, abs(primal), abs(primal - comp_gap))
 
     return Certificate(stage, iteration, 0.0,
                        float(primal), float(primal - comp_gap), float(kkt), gap)

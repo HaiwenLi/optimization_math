@@ -23,7 +23,11 @@ def _project_box(x, l, u):
 
 
 def _estimate_qp_lipschitz(Q, *, power_iter=50):
-    """Estimate the spectral norm ||Q||_2 via power iteration (Q matrix/op)."""
+    """Estimate ||Q||_2 via power iteration, inflated by a safety factor.
+
+    The raw Rayleigh quotient is a *lower* bound on ||Q||_2; projected gradient
+    needs L >= ||Q||_2, so we inflate slightly to stay in the safe regime.
+    """
     rng = np.random.default_rng(0)
     v = rng.standard_normal(Q.shape[0])
     v /= np.linalg.norm(v)
@@ -36,7 +40,7 @@ def _estimate_qp_lipschitz(Q, *, power_iter=50):
         w /= norm
         est = float(np.dot(w, Q @ w))
         v = w
-    return max(est, np.finfo(np.float64).tiny)
+    return max(est, np.finfo(np.float64).tiny) * 1.05
 
 
 def solve_qp_box(Q, c, l=None, u=None, *, x0=None, lipschitz=None,

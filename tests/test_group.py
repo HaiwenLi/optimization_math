@@ -48,3 +48,15 @@ def test_rejects_bad_groups():
     with pytest.raises(ValueError):
         solve_fista_group(np.eye(2), np.array([1.0, 2.0]), 1.0, [np.array([0, 5])],
                           lipschitz=1.0)
+
+
+def test_group_lasso_with_mu_converges():
+    # Regression: the mu>0 dual must include the mu term so gap reaches zero.
+    y = np.array([3.0, 4.0])
+    lam = 2.0
+    r = solve_fista_group(np.eye(2), y, lam, [np.array([0, 1])], mu=1.0,
+                          lipschitz=2.0, certificate_stride=1,
+                          kkt_tol=1e-8, gap_tol=1e-9)
+    assert r.status == "converged"
+    np.testing.assert_allclose(r.x, [0.9, 1.2], atol=1e-6)
+    assert r.certificate.relative_gap <= 1e-9

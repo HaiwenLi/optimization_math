@@ -92,6 +92,18 @@ print(result.x)
 
 统一可选后处理：支撑内 NNLS 幅度去偏（数值秩检查 + 残差保护）。
 
+## 算法调研扩展（经典问题覆盖）
+
+以「已知真值 + 评价指标 + 自动判定」统一范式，对五类经典优化问题各完成调研文档、求解器、证书与基准（详见 [总路线图](docs/survey/2026-11-17-算法调研扩展总路线图.md)）：
+
+| 类型 | 求解器 | 证书 | 基准判定 |
+|---|---|---|---|
+| T1 带符号 LASSO/弹性网 | `fista_signed.py` | 软阈值 KKT + 对偶 gap | F1 对比非负版 |
+| T2 稀疏 logistic | `fista_logistic.py` | logistic 梯度 KKT + Fenchel 对偶 | λ-F1 非单调 |
+| T3 1D TV 去噪 | `chambolle_tv.py` | Chambolle 原始-对偶 gap | λ-误差非单调 |
+| T4 盒约束 QP/NNLS | `qp_box.py` | box KKT + 互补松弛 gap | 边界活动识别 |
+| T5 group/低秩 | `fista_group.py` / `fista_nuclear.py` | 组范数 KKT / 近端不动点 | 组联合选择 / 秩恢复 |
+
 ## 证书化对比协议
 
 同一问题 → 多求解器 → 五指标横向验收：**ε_KKT、相对对偶间隙、支撑 F1、幅度 RMSE、耗时**。求解器的差异不是"答案不同"（凸问题最优解唯一），而是速度、证书强度与支撑定位能力的权衡。
@@ -100,17 +112,36 @@ print(result.x)
 
 ```
 optimization_math/
+├── benchmarks/                        # 已知真值基准（指标 + 自动断言 + 图表）
+│   ├── metrics.py                     # 恢复指标（rel.L2 / F1 / RMSE / 稳定性）
+│   ├── bench_signed_lasso.py          # T1
+│   ├── bench_logistic.py              # T2
+│   ├── bench_tv.py                    # T3
+│   ├── bench_qp.py                    # T4
+│   └── bench_structured.py            # T5（group + 核范数）
 ├── docs/
-│   ├── survey/                      # 算法调研
-│   └── superpowers/                 # 设计规格（specs）与实施计划（plans）
+│   ├── survey/                        # 算法调研（含 T1–T5）
+│   └── superpowers/                   # 设计规格（specs）与实施计划（plans）
 ├── src/optimization_math/
-│   ├── operators.py                 # 带形状检查的线性算子接口
-│   ├── certificates.py              # 投影 KKT + 相对对偶间隙证书
+│   ├── operators.py                   # 带形状检查的线性算子接口
+│   ├── operators_difference.py        # 一阶差分算子 D（隐式）
+│   ├── certificates.py                # 非负 LASSO 证书
+│   ├── certificates_signed.py         # 带符号 LASSO 证书
+│   ├── certificates_logistic.py       # logistic Fenchel 对偶证书
+│   ├── certificates_qp.py             # box-QP 互补松弛证书
+│   ├── certificates_group.py          # group LASSO 证书
+│   ├── certificates_nuclear.py        # 核范数（谱）证书
 │   └── solvers/
-│       ├── _common.py               # 共享校验助手（私有）
-│       ├── admm.py                  # 三分裂 ADMM（黑盒 CG 内层 / 自适应 ρ）
-│       └── fista.py                 # 非负 FISTA（回溯 / 重启 / λ 延拓）
-└── tests/                           # 含证书断言的测试
+│       ├── _common.py                 # 共享校验/估计助手（私有）
+│       ├── fista.py                   # 非负 FISTA
+│       ├── admm.py                    # 三分裂 ADMM
+│       ├── fista_signed.py            # 带符号 FISTA
+│       ├── fista_logistic.py          # 稀疏 logistic FISTA
+│       ├── chambolle_tv.py            # 1D TV（Chambolle 投影）
+│       ├── qp_box.py                  # 盒约束 QP（投影梯度）
+│       ├── fista_group.py             # group LASSO FISTA
+│       └── fista_nuclear.py           # 核范数 FISTA
+└── tests/                             # 含证书断言的测试
 ```
 
 ## 文档
@@ -120,6 +151,8 @@ optimization_math/
 - [实施计划（2026-11-15）](docs/superpowers/plans/2026-11-15-nonnegative-fista.md) — TDD 任务分解与验收记录
 - [三分裂 ADMM 核心设计规格（2026-11-16）](docs/superpowers/specs/2026-11-16-three-split-admm-design.md) — 已知背景 b 的 ADMM / split Bregman 同族核心求解器设计
 - [实施计划（2026-11-16）](docs/superpowers/plans/2026-11-16-three-split-admm.md) — TDD 任务分解与验收记录
+- [算法调研扩展总路线图（2026-11-17）](docs/survey/2026-11-17-算法调研扩展总路线图.md) — 五类经典优化问题的调研/求解器/证书/基准索引
+- [带符号 LASSO/弹性网（T1）](docs/survey/2026-11-17-带符号-LASSO-弹性网.md) · [稀疏 logistic（T2）](docs/survey/2026-11-17-稀疏-logistic-回归.md) · [Fused LASSO/TV 去噪（T3）](docs/survey/2026-11-17-Fused-LASSO-TV-去噪.md) · [盒约束 QP/NNLS（T4）](docs/survey/2026-11-17-盒约束-QP-NNLS.md) · [group LASSO/核范数低秩（T5）](docs/survey/2026-11-17-group-LASSO-核范数低秩.md)
 
 ## 约定
 

@@ -36,6 +36,9 @@ def compute_certificate_group(A, y, x, lam, groups, *, mu=0.0, b=None, stage=0, 
     primal = 0.5 * np.dot(r, r) + 0.5 * mu * np.dot(x, x)
 
     slices = _group_slices(groups)
+    all_idx = np.concatenate(slices) if slices else np.array([], dtype=np.intp)
+    if all_idx.size and (all_idx.min() < 0 or all_idx.max() >= n):
+        raise ValueError("group indices out of range")
     max_viol = 0.0
     max_gnorm = 0.0
     for s in slices:
@@ -52,12 +55,14 @@ def compute_certificate_group(A, y, x, lam, groups, *, mu=0.0, b=None, stage=0, 
         max_viol = max(max_viol, viol)
     kkt = max_viol / max(lam, max_gnorm)
 
-    # Dual: nu = -theta r, theta = min(1, lam / max_g ||(A^T r)_g||).
-    # (No mu in the pure group-lasso dual; keep the same theta clamp.)
-    atr = op.rmatvec(r)
-    max_group_atr = max((float(np.linalg.norm(atr[s])) for s in slices), default=0.0)
-    theta = 1.0 if max_group_atr <= lam else lam / max_group_atr
-    dual = -0.5 * theta**2 * np.dot(r, r) + theta * np.dot(b_vec - y, r)
+    # Dual: nu = -theta r, theta from the group gradient g = A^T r + mu x,
+    # mirroring the reference certificate's use of q = A^T r + mu x for theta.
+    max_group_gnorm = max((float(np.linalg.norm(g[s])) for s in slices), default=0.0)
+    theta = 1.0 if max_group_gnorm <= lam else lam / max_group_gnorm
+    dual = (
+        -0.5 * theta**2 * (np.dot(r, r) + mu * np.dot(x, x))
+        + theta * np.dot(b_vec - y, r)
+    )
     gap = (primal - dual) / max(1.0, abs(primal), abs(dual))
     if -1e-12 <= gap < 0:
         gap = 0.0

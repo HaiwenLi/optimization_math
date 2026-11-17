@@ -58,7 +58,7 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
 
     L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
         op, power_iter=power_iter, power_tol=power_tol
-    )
+    ) + mu
 
     z = x.copy()
     momentum = 1.0
