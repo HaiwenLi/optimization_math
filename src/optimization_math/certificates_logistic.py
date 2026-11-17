@@ -5,7 +5,19 @@ import numpy as np
 
 
 def _sigmoid(z):
-    return 1.0 / (1.0 + np.exp(-z))
+    z = np.asarray(z, dtype=np.float64)
+    # Stable sigmoid: positive tail -> 1, negative tail -> 0, avoids overflow.
+    out = np.zeros_like(z)
+    pos = z >= 0
+    out[pos] = 1.0 / (1.0 + np.exp(-z[pos]))
+    out[~pos] = np.exp(z[~pos]) / (1.0 + np.exp(z[~pos]))
+    return out
+
+
+def _logistic_loss(margins):
+    """Stable log(1 + exp(-margins)) via log1p, avoiding overflow for large -margins."""
+    margins = np.asarray(margins, dtype=np.float64)
+    return np.maximum(0.0, -margins) + np.log1p(np.exp(-np.abs(margins)))
 
 
 def _phi_conjugate(s):
@@ -15,8 +27,9 @@ def _phi_conjugate(s):
     phi*(0) = phi*(-1) = 0 handled exactly (avoiding log(0) NaNs).
     """
     s = np.asarray(s, dtype=np.float64)
-    if not np.all((s >= -1.0) & (s <= 0.0)):
-        raise ValueError("phi* is only defined on [-1, 0]")
+    # Clamp roundoff at the domain boundary rather than hard-failing: the clip
+    # theta = min(..., 1/(N sigma_max)) can make s round to marginally below -1.
+    s = np.clip(s, -1.0, 0.0)
     out = np.zeros_like(s)
     interior = (s > -1.0) & (s < 0.0)
     out[interior] = (
@@ -43,6 +56,8 @@ def compute_certificate_logistic(X, y, w, lam, *, stage=0, iteration=0):
         raise ValueError("X, y, w shapes do not match")
     if not np.all(np.isfinite(X)) or not np.all(np.isfinite(y)) or not np.all(np.isfinite(w)):
         raise ValueError("X, y, w must be finite")
+    if not np.all((y == 1.0) | (y == -1.0)):
+        raise ValueError("y must contain only +1 and -1 labels")
     try:
         lam = float(lam)
     except (TypeError, ValueError):
@@ -56,7 +71,7 @@ def compute_certificate_logistic(X, y, w, lam, *, stage=0, iteration=0):
     # Gradient of the (normalized) loss: -(1/N) sum_i y_i x_i sigma_i.
     g = -(X.T @ (y * sigma)) / N
 
-    primal = float(np.mean(np.log(1.0 + np.exp(-margins))) + lam * np.sum(np.abs(w)))
+    primal = float(np.mean(_logistic_loss(margins)) + lam * np.sum(np.abs(w)))
 
     # KKT: active |w_j|>0 -> g_j = -lam sign(w_j); inactive |w_j|=0 -> |g_j| <= lam.
     nonzero = np.abs(w) > 0

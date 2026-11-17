@@ -40,7 +40,9 @@ def run_solver(name, X, y, w_true, lam):
         solver=name,
         status=res.status,
         iterations=int(res.iterations),
-        matvec_count=int(res.iterations),  # one X/X^T pass per FISTA iteration
+        # Each FISTA gradient = one X@w + one X^T@· (two matvecs); the count here
+        # is a lower bound and does not include backtracking/restart extra probes.
+        matvec_count=int(res.iterations) * 2,
         kkt_residual=float(res.certificate.kkt_residual),
         relative_gap=float(res.certificate.relative_gap),
         objective=float(res.certificate.primal),

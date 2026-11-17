@@ -4,7 +4,11 @@ from typing import Literal
 import numpy as np
 
 from optimization_math.certificates import Certificate
-from optimization_math.certificates_logistic import compute_certificate_logistic, _sigmoid
+from optimization_math.certificates_logistic import (
+    _logistic_loss,
+    _sigmoid,
+    compute_certificate_logistic,
+)
 from optimization_math.solvers._common import _positive_float, _positive_int
 from optimization_math.solvers.fista_signed import _soft_threshold_prox
 
@@ -23,7 +27,7 @@ def _logistic_loss_and_grad(X, y, w):
     N = X.shape[0]
     margins = y * (X @ w)
     sigma = _sigmoid(-margins)
-    loss = float(np.mean(np.log1p(np.exp(-margins))))
+    loss = float(np.mean(_logistic_loss(margins)))
     grad = -(X.T @ (y * sigma)) / N
     return loss, grad
 
@@ -42,6 +46,8 @@ def solve_fista_logistic(X, y, lam, *, w0=None, lipschitz=None,
     y = np.asarray(y, dtype=np.float64)
     if X.ndim != 2 or y.ndim != 1 or X.shape[0] != y.shape[0]:
         raise ValueError("X must be 2D and y 1D with matching first dimension")
+    if not np.all((y == 1.0) | (y == -1.0)):
+        raise ValueError("y must contain only +1 and -1 labels")
     try:
         lam = float(lam)
     except (TypeError, ValueError):

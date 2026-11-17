@@ -45,8 +45,9 @@ def test_phi_conjugate_domain_and_endpoints():
     assert _phi_conjugate(np.array([-1.0]))[0] == pytest.approx(0.0)
     mid = _phi_conjugate(np.array([-0.5]))[0]
     assert mid == pytest.approx(np.log(0.5))  # phi*(-0.5) = log(0.5) < 0
-    with pytest.raises(ValueError):
-        _phi_conjugate(np.array([0.5]))
+    # Out-of-domain input is clamped (defensive against float roundoff) rather
+    # than rejected: phi*(0.5) clamps to phi*(0) = 0.
+    assert _phi_conjugate(np.array([0.5]))[0] == pytest.approx(0.0)
 
 
 def test_sparse_logistic_recovers_sparse_truth_and_classifies():
@@ -83,3 +84,12 @@ def test_certificate_rejects_bad_shapes():
         compute_certificate_logistic(
             np.array([[1.0]]), np.array([1.0]), np.array([np.nan]), 0.1
         )
+
+
+def test_logistic_rejects_zero_one_labels():
+    with pytest.raises(ValueError, match="\\+1 and -1"):
+        compute_certificate_logistic(
+            np.array([[1.0]]), np.array([0.0]), np.array([0.5]), 0.1
+        )
+    with pytest.raises(ValueError, match="\\+1 and -1"):
+        solve_fista_logistic(np.array([[1.0]]), np.array([0.0]), 0.1)
