@@ -110,6 +110,18 @@ print(result.x)
 
 同一问题 → 多求解器 → 五指标横向验收：**ε_KKT、相对对偶间隙、支撑 F1、幅度 RMSE、耗时**。凸问题不保证最优解唯一；只有满足严格凸性等条件时才能比较解向量的一致性，否则应比较目标值与证书。
 
+### 标准问题：独立最优解与算法横向对比
+
+```powershell
+python -m pip install -e ".[test,benchmark]"
+python -W error -m benchmarks.bench_standard --out-dir benchmarks/out/standard
+```
+
+- **8 类问题、96 个已知最优解实例、177 次算法运行**：非负 FISTA/ADMM、带符号 FISTA/PDHG、QP 与 logistic 对比 SciPy；TV、group 与核范数用独立解析解验收。
+- 3 个随机种子，条件目标 1/10/100；同一实例、同一证书精度，分别比较最优目标误差、解误差、迭代数、实测正演/伴随调用与时间。数据生成真值的恢复误差单列，不冒充最优化误差。
+- 这是小规模正确性测试（向量维度 8、核范数矩阵 4×4、两点 TV），不是大型成像性能结论。
+- [参考解推导与协议](docs/benchmarks/standard-optimization-comparisons.md) · [实测结果与图像](docs/benchmarks/2026-11-17-standard-results/README.md) · [新增缺陷与修复记录](docs/reviews/2026-11-17-standard-validation-followup.md)
+
 ## 目录结构
 
 ```

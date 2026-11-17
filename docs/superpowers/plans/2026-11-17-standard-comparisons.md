@@ -17,37 +17,37 @@ and commit locally without pushing.
 
 ## Task 1: Independent fixtures and comparison runner
 
-- [ ] Add `benchmarks/standard_problems.py`: immutable cases with independent
+- [x] Add `benchmarks/standard_problems.py`: immutable cases with independent
   objective, exact optimum and optional generating truth. Cover nonnegative
   and signed LASSO/elastic net, box QP/NNLS, normalized sparse logistic,
   two-point TV, group shrinkage and spectral shrinkage.
-- [ ] Add `benchmarks/bench_standard.py`: real operator counters, timing,
+- [x] Add `benchmarks/bench_standard.py`: real operator counters, timing,
   convergence/certificate checks, optimum error separate from recovery
   error, and solver dispatch. Compare FISTA/ADMM on nonnegative problems,
   signed FISTA/PDHG on signed problems, projected gradient/SciPy on QP,
   FISTA/SciPy on logistic, existing structured/TV solvers with exact oracles.
-- [ ] Tests first in `tests/test_standard_comparisons.py`: literal analytic
+- [x] Tests first in `tests/test_standard_comparisons.py`: literal analytic
   anchors, oracle KKT checks, counter accuracy, identical inputs, empty-run
   rejection, convergence and objective/solution accuracy across the matrix.
-- [ ] Observe red tests, implement, run green. Fix production bugs only
+- [x] Observe red tests, implement, run green. Fix production bugs only
   with a failing minimal regression and record each root cause.
 
 ## Task 2: Evidence and documentation
 
-- [ ] Add JSON/Markdown report and convergence plots through the runner.
+- [x] Add JSON/Markdown report and convergence plots through the runner.
   Report platform/library versions, seeds, tolerances, reference provenance
   and timing limitations. Non-applicable operator counts are null, not zero.
-- [ ] Run the full matrix and the full pytest suite with warnings as errors.
-- [ ] Inspect rendered plots and publish a tracked summary with relative
+- [x] Run the full matrix and the full pytest suite with warnings as errors.
+- [x] Inspect rendered plots and publish a tracked summary with relative
   image links. Keep volatile bulk output under ignored `benchmarks/out/`.
-- [ ] Update README with reproduction commands and interpretation.
+- [x] Update README with reproduction commands and interpretation.
 
 ## Task 3: Independent review and local delivery
 
-- [ ] Fresh-context review of oracle independence, comparison fairness,
+- [x] Fresh-context review of oracle independence, comparison fairness,
   stopping honesty and any production fixes; resolve objective findings.
-- [ ] Run graph update, staged whitespace/privacy checks and fresh tests.
-- [ ] Commit only task files locally; verify no push and a clean work tree.
+- [x] Run graph update, staged whitespace/privacy checks and fresh tests.
+- [x] Commit only task files locally; verify no push and a clean work tree.
 
 ## Task interfaces
 
@@ -70,3 +70,18 @@ the only cross-task mutable files are the runner and this progress record.
   `0.4375`; subtracting large squared norms destroys the dual objective.
   Use the algebraically equivalent difference-based dual formula and test
   invariance under a large constant offset.
+- Task 1: complete; independent reference review approved after correcting
+  cold-import timing and aligning SciPy's certificate cadence/stopping gate.
+- Production fixes: complete; 75 structured regressions passed, scoped
+  independent review READY.
+- Task 2: complete; 177/177 runs passed, full suite 260 passed with warnings
+  as errors. Three rendered plots inspected; tracked snapshot hashes match
+  all five generated artifacts (Markdown, compact JSON, three PNGs).
+- Graph navigation index updated locally; generated graph artifacts remain
+  excluded from commits.
+- Final review: one P2 remained (nonfinite report values crashed plot
+  rendering and could strand a stale README). Fixed with parametrized
+  NaN/inf regressions (red 12 failed -> green 16/16 in the report module),
+  explicit nonfinite annotations instead of a 1e-16 floor, `n/a (nonfinite)`
+  Markdown cells and JSON nulls; full suite 272 passed, matrix 177/177,
+  snapshot resynced (PNGs byte-identical, timings refreshed).

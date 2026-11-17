@@ -24,10 +24,32 @@ def certificate_tv_chambolle(D, y, x, lam_tv, p):
     subgradient on plateaus Dx=0 is genuinely free and sign(0)=0 is not the
     correct subgradient). The ``kkt_residual`` field therefore carries the
     absolute primal-dual gap, which goes to zero exactly at the optimum.
+
+    Inputs must be finite vectors matching D, with lam_tv >= 0 and |p| <= 1.
+    Dual-bound overshoots up to 1e-12 are clipped to preserve dual feasibility.
     """
+    y = np.asarray(y, dtype=np.float64)
+    x = np.asarray(x, dtype=np.float64)
+    p = np.asarray(p, dtype=np.float64)
+    if y.shape != (D.shape[1],) or x.shape != y.shape or p.shape != (D.shape[0],):
+        raise ValueError("x, y and p must be 1D vectors matching D")
+    if not all(np.all(np.isfinite(v)) for v in (x, y, p)):
+        raise ValueError("x, y and p must be finite")
+    try:
+        lam_tv = float(lam_tv)
+    except (TypeError, ValueError):
+        raise ValueError("lam_tv must be a nonnegative number") from None
+    if not np.isfinite(lam_tv) or lam_tv < 0:
+        raise ValueError("lam_tv must be nonnegative")
+    if np.any(np.abs(p) > 1.0 + 1e-12):
+        raise ValueError("p must be dual feasible: |p| <= 1")
+    p = np.clip(p, -1.0, 1.0)
+
     primal = 0.5 * np.dot(x - y, x - y) + lam_tv * np.sum(np.abs(D.matvec(x)))
-    dual = 0.5 * np.dot(y, y) - 0.5 * np.dot(y - lam_tv * D.rmatvec(p),
-                                             y - lam_tv * D.rmatvec(p))
+    # Use differences rather than subtracting large squared norms: a DC offset
+    # must not destroy the dual objective through catastrophic cancellation.
+    dual_shift = lam_tv * D.rmatvec(p)
+    dual = lam_tv * np.dot(D.matvec(y), p) - 0.5 * np.dot(dual_shift, dual_shift)
     abs_gap = primal - dual
     gap = abs_gap / max(1.0, abs(primal), abs(dual))
     if -1e-12 <= gap < 0:

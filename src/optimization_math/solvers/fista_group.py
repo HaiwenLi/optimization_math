@@ -4,7 +4,10 @@ from typing import Literal
 import numpy as np
 
 from optimization_math.certificates import Certificate
-from optimization_math.certificates_group import compute_certificate_group
+from optimization_math.certificates_group import (
+    _normalize_group_partition,
+    compute_certificate_group,
+)
 from optimization_math.operators import as_linear_operator
 from optimization_math.solvers._common import _estimate_lipschitz, _positive_float, _positive_int
 
@@ -33,6 +36,11 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
                       max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
                       certificate_stride=10, power_iter=50, power_tol=1e-6,
                       restart=True):
+    """Solve group LASSO for a disjoint complete partition of integer indices.
+
+    Each group must be nonempty and every coordinate must occur exactly once.
+    Overlapping groups and layouts with unpenalized coordinates are unsupported.
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     power_iter = _positive_int(power_iter, "power_iter")
@@ -114,12 +122,4 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
 
 
 def _normalize_groups(groups, n):
-    out = [np.asarray(g, dtype=np.intp) for g in groups]
-    if len(out) == 0:
-        raise ValueError("groups must be a nonempty list of index arrays")
-    if any(g.ndim != 1 or g.size == 0 for g in out):
-        raise ValueError("groups must be a list of nonempty index arrays")
-    all_idx = np.concatenate(out)
-    if all_idx.size and (all_idx.min() < 0 or all_idx.max() >= n):
-        raise ValueError("group indices out of range")
-    return out
+    return _normalize_group_partition(groups, n)
