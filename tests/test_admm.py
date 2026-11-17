@@ -145,3 +145,67 @@ def test_admm_convergence_helper_requires_residuals_and_both_certificates():
     bad_gap = compute_certificate(np.array([[1.0]]), np.array([2.0]), np.array([1.0]), 0.5)
     assert bad_gap.relative_gap > 1e-8
     assert not _admm_has_converged(0.0, 0.0, bad_gap, 1e-6, 1e-6, 1e-8)
+
+
+def test_balance_rho_preserves_unscaled_dual_when_not_clamped():
+    from optimization_math.solvers.admm import _balance_rho
+    u = np.array([0.5, -2.0])
+    # primal (20.0) strictly exceeds rho_balance * dual (10.0 * 1.0), so rho doubles.
+    new_rho, new_u = _balance_rho(
+        1.0, u, 20.0, 1.0,
+        rho_min=1e-3, rho_max=1e3, rho_balance=10.0, rho_scale=2.0,
+    )
+    assert new_rho == 2.0
+    np.testing.assert_allclose(new_rho * new_u, 1.0 * u)
+
+
+def test_balance_rho_respects_bounds():
+    from optimization_math.solvers.admm import _balance_rho
+    u = np.ones(2)
+    high_rho, high_u = _balance_rho(
+        1e3, u, 100.0, 1.0,
+        rho_min=1e-3, rho_max=1e3, rho_balance=10.0, rho_scale=2.0,
+    )
+    low_rho, low_u = _balance_rho(
+        1e-3, u, 1.0, 100.0,
+        rho_min=1e-3, rho_max=1e3, rho_balance=10.0, rho_scale=2.0,
+    )
+    assert high_rho == 1e3
+    assert low_rho == 1e-3
+    np.testing.assert_allclose(high_rho * high_u, 1e3 * u)
+    np.testing.assert_allclose(low_rho * low_u, 1e-3 * u)
+
+
+def test_adaptive_rho_stays_bounded_and_converges():
+    result = solve_admm(
+        np.array([[1.0]]), np.array([2.0]), 0.5,
+        rho=0.25, adaptive_rho=True, rho_min=0.1, rho_max=4.0,
+        rho_balance=2.0, rho_scale=2.0, cg_tol=1e-12,
+        residual_tol=1e-6, certificate_stride=1,
+        kkt_tol=1e-7, gap_tol=1e-8, max_iter=300,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [1.5], atol=1e-6)
+    assert all(0.1 <= item.rho <= 4.0 for item in result.history)
+    assert 0.1 <= result.rho <= 4.0
+
+
+def test_adaptive_rho_converges_on_scalar_lasso():
+    # Fail-first anchor: Task 3 always raises NotImplementedError when adaptive_rho=True,
+    # so this test fails (propagates the error) until Task 4 removes the guard and
+    # adaptive rho converges to the scalar optimum.
+    result = solve_admm(np.array([[1.0]]), np.array([2.0]), 0.5, adaptive_rho=True)
+    assert result.status == "converged"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"adaptive_rho": "yes"}, {"rho_min": 0.0}, {"rho_max": 0.0},
+     {"rho_min": 2.0, "rho_max": 1.0}, {"rho_balance": 0.5},
+     {"rho_scale": 1.0}],
+)
+def test_admm_rejects_invalid_adaptive_rho_controls(overrides):
+    kwargs = dict(A=np.array([[1.0]]), y=np.array([1.0]), lam=0.1)
+    kwargs.update(overrides)
+    with pytest.raises(ValueError):
+        solve_admm(**kwargs)

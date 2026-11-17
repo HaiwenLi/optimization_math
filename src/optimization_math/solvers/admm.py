@@ -99,6 +99,18 @@ def _result(x, status, iterations, rho, cg_iterations, certificate, history, cer
     )
 
 
+def _balance_rho(rho, u, primal_residual, dual_residual, *,
+                 rho_min, rho_max, rho_balance, rho_scale):
+    new_rho = float(rho)
+    if primal_residual > rho_balance * dual_residual:
+        new_rho = min(rho_max, new_rho * rho_scale)
+    elif dual_residual > rho_balance * primal_residual:
+        new_rho = max(rho_min, new_rho / rho_scale)
+    if new_rho == rho:
+        return new_rho, u
+    return new_rho, u * (rho / new_rho)
+
+
 def solve_admm(A, y, lam, *, mu=0.0, b=None, x0=None, rho=1.0,
                adaptive_rho=False, rho_min=1e-3, rho_max=1e3,
                rho_balance=10.0, rho_scale=2.0, max_iter=200,
@@ -119,8 +131,6 @@ def solve_admm(A, y, lam, *, mu=0.0, b=None, x0=None, rho=1.0,
         raise ValueError("invalid adaptive rho bounds or gains")
     if not isinstance(adaptive_rho, (bool, np.bool_)):
         raise ValueError("adaptive_rho must be a boolean")
-    if adaptive_rho:
-        raise NotImplementedError("adaptive rho is implemented in Task 4")
     if cg_max_iter is not None:
         cg_max_iter = _positive_int(cg_max_iter, "cg_max_iter")
 
