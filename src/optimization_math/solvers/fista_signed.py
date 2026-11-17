@@ -6,8 +6,7 @@ import numpy as np
 from optimization_math.certificates import Certificate, _vector
 from optimization_math.certificates_signed import compute_certificate_signed
 from optimization_math.operators import as_linear_operator
-from optimization_math.solvers._common import _positive_float, _positive_int
-from optimization_math.solvers.fista import _estimate_lipschitz
+from optimization_math.solvers._common import _estimate_lipschitz, _positive_float, _positive_int
 
 
 @dataclass(frozen=True)

@@ -21,6 +21,26 @@ def _positive_float(value, name):
     return out
 
 
+def _estimate_lipschitz(op, *, power_iter, power_tol):
+    rng = np.random.default_rng(0)
+    v = rng.standard_normal(op.shape[1])
+    v /= np.linalg.norm(v)
+    estimate = 0.0
+    for _ in range(power_iter):
+        w = op.rmatvec(op.matvec(v))
+        norm = np.linalg.norm(w)
+        if norm == 0:
+            return 1.0
+        w /= norm
+        new_estimate = float(np.dot(w, op.rmatvec(op.matvec(w))))
+        if estimate > 0 and abs(new_estimate - estimate) <= power_tol * max(1.0, abs(new_estimate)):
+            estimate = new_estimate
+            break
+        estimate = new_estimate
+        v = w
+    return max(estimate, np.finfo(np.float64).tiny)
+
+
 def _validate_common(op, y, lam, mu, b, x0):
     y = _vector(y, "y")
     b_vec = np.zeros_like(y) if b is None else _vector(b, "b")
