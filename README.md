@@ -153,6 +153,7 @@ optimization_math/
 - [实施计划（2026-11-16）](docs/superpowers/plans/2026-11-16-three-split-admm.md) — TDD 任务分解与验收记录
 - [算法调研扩展总路线图（2026-11-17）](docs/survey/2026-11-17-算法调研扩展总路线图.md) — 五类经典优化问题的调研/求解器/证书/基准索引
 - [带符号 LASSO/弹性网（T1）](docs/survey/2026-11-17-带符号-LASSO-弹性网.md) · [稀疏 logistic（T2）](docs/survey/2026-11-17-稀疏-logistic-回归.md) · [Fused LASSO/TV 去噪（T3）](docs/survey/2026-11-17-Fused-LASSO-TV-去噪.md) · [盒约束 QP/NNLS（T4）](docs/survey/2026-11-17-盒约束-QP-NNLS.md) · [group LASSO/核范数低秩（T5）](docs/survey/2026-11-17-group-LASSO-核范数低秩.md)
+- [L2+L1 进阶算法族综述（2026-11-17）](docs/survey/2026-11-17-L2L1-进阶算法族综述.md) — 主-对偶（PDHG）、拟牛顿（OWL-QN/Prox-QN）、坐标下降、半光滑牛顿、safe screening 的收敛率与选型
 
 ## 约定
 
