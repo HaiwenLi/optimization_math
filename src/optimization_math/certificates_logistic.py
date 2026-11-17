@@ -52,6 +52,8 @@ def compute_certificate_logistic(X, y, w, lam, *, stage=0, iteration=0):
     if X.ndim != 2 or y.ndim != 1 or w.ndim != 1:
         raise ValueError("X must be 2D, y and w must be 1D")
     N, p = X.shape
+    if N == 0 or p == 0:
+        raise ValueError("X must have positive dimensions")
     if y.shape != (N,) or w.shape != (p,):
         raise ValueError("X, y, w shapes do not match")
     if not np.all(np.isfinite(X)) or not np.all(np.isfinite(y)) or not np.all(np.isfinite(w)):
@@ -85,7 +87,7 @@ def compute_certificate_logistic(X, y, w, lam, *, stage=0, iteration=0):
     # l-inf constraint and the phi* domain bound N*nu_i <= 1.
     g_inf = float(np.linalg.norm(g, ord=np.inf))
     sigma_max = float(np.max(sigma)) if N else 0.0
-    theta = 1.0
+    theta = 1.0 / N
     if g_inf > 0:
         theta = min(theta, lam / (N * g_inf))
     if sigma_max > 0:

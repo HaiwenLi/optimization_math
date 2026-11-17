@@ -75,12 +75,12 @@ def compute_safe_screen(A, y, x, lam, *, mu=0.0, b=None, gap=None, theta=None):
     b : array or None
         Offset term (default zeros).
     gap : float or None
-        Precomputed primal-dual gap ``P(x) - D(nu)``. If None it is computed
-        from ``compute_certificate_signed`` (and ``theta`` must also be given
-        or recomputed).
+        Precomputed primal-dual gap ``P(x) - D(nu)`` for the same ``x`` and
+        ``theta``. The caller must supply a valid upper bound, not a normalized
+        relative gap. If None it is computed using the actual dual point.
     theta : float or None
-        Precomputed dual scaling ``theta``. If None it is computed from the
-        certificate together with ``gap``.
+        Dual scaling in (0, 1] satisfying ``||A.T @ (theta*r)||_inf <= lam``.
+        If None, use the same scaling as the signed certificate.
 
     Returns
     -------
@@ -111,33 +111,36 @@ def compute_safe_screen(A, y, x, lam, *, mu=0.0, b=None, gap=None, theta=None):
         raise NotImplementedError(
             "GAP-safe screening is currently derived for mu=0 (plain LASSO) only"
         )
-    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(x)):
-        raise ValueError("y and x must be finite")
+    if not all(np.all(np.isfinite(v)) for v in (y, x, b_vec)):
+        raise ValueError("y, x and b must be finite")
 
-    # Dual feasible point and gap. The signed certificate supplies only the
-    # gap (primal - dual); theta (hence nu) is computed here because the
-    # Certificate dataclass does not carry a theta field.
-    if gap is None or theta is None:
+    r = op.matvec(x) + b_vec - y
+    q_inf = float(np.linalg.norm(op.rmatvec(r), ord=np.inf))
+    supplied_theta = theta is not None
+    if theta is None:
+        theta = 1.0 if q_inf <= lam else lam / q_inf
+    theta = _positive_float(theta, "theta")
+    if theta > 1.0 or theta * q_inf > lam * (1.0 + 1e-12):
+        raise ValueError("theta must be <= 1 and produce a dual-feasible point")
+    nu = theta * r
+
+    if gap is None:
         cert = compute_certificate_signed(op, y, x, lam, mu=mu, b=b_vec)
-        if gap is None:
+        if supplied_theta:
+            # The certificate's dual uses its OWN theta, not the supplied one.
+            dual = -0.5 * np.dot(nu, nu) + np.dot(b_vec - y, nu)
+            gap = max(cert.primal - dual, 0.0)
+        else:
             gap = max(cert.primal - cert.dual, 0.0)
-        if theta is None:
-            r = op.matvec(x) + b_vec - y
-            q = op.rmatvec(r) + mu * x
-            q_inf = np.linalg.norm(q, ord=np.inf)
-            theta = 1.0 if q_inf <= lam else lam / q_inf
 
-    if gap is not None and (not np.isfinite(gap) or gap < 0.0):
+    try:
+        gap = float(gap)
+    except (TypeError, ValueError):
+        raise ValueError("gap must be a finite nonnegative number") from None
+    if not np.isfinite(gap) or gap < 0.0:
         raise ValueError("gap must be a finite nonnegative number")
 
-    if theta <= 0.0 or not np.isfinite(theta):
-        # theta=0 can only mean lam=0 (rejected above) or a degenerate iterate;
-        # no coordinate is then provably safe, so screen nothing.
-        return np.zeros(x.shape[0], dtype=bool)
-
     # nu = theta * r (dual feasible), r_ball = sqrt(2 * gap).
-    r = op.matvec(x) + b_vec - y
-    nu = theta * r
     r_ball = float(np.sqrt(max(2.0 * gap, 0.0)))
 
     # |a_i^T nu| + ||a_i|| * r_ball < lam  <=>  coordinate i is safely zero.

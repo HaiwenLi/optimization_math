@@ -30,6 +30,52 @@ def test_single_sample_zero_at_high_lambda():
     np.testing.assert_allclose(res.w, [0.0], atol=1e-8)
 
 
+def test_multisample_certificate_is_tight_at_zero_optimum():
+    cert = compute_certificate_logistic(
+        np.ones((2, 1)), np.ones(2), np.zeros(1), 1.0
+    )
+    assert cert.primal == pytest.approx(np.log(2.0))
+    assert cert.dual == pytest.approx(np.log(2.0))
+    assert cert.kkt_residual == pytest.approx(0.0, abs=1e-12)
+    assert cert.relative_gap == pytest.approx(0.0, abs=1e-12)
+
+
+def test_multisample_zero_optimum_converges_without_iterations():
+    res = solve_fista_logistic(
+        np.ones((2, 1)), np.ones(2), 1.0, max_iter=20,
+        kkt_tol=1e-8, gap_tol=1e-9,
+    )
+    assert res.status == "converged"
+    assert res.iterations == 0
+    np.testing.assert_array_equal(res.w, [0.0])
+    assert res.certificate.relative_gap <= 1e-9
+
+
+def test_zero_design_converges_from_nonzero_warm_start():
+    with np.errstate(divide="raise", invalid="raise"):
+        res = solve_fista_logistic(
+            np.zeros((1, 1)), np.ones(1), 1.0, w0=np.ones(1),
+            max_iter=20, certificate_stride=1, kkt_tol=1e-8, gap_tol=1e-9,
+        )
+    assert res.status == "converged"
+    assert np.isfinite(res.lipschitz) and res.lipschitz > 0.0
+    np.testing.assert_array_equal(res.w, [0.0])
+    assert res.certificate.primal == pytest.approx(np.log(2.0))
+    assert res.certificate.relative_gap <= 1e-9
+
+
+@pytest.mark.parametrize("shape", [(0, 1), (1, 0), (0, 0)])
+@pytest.mark.parametrize("certificate", [False, True])
+def test_logistic_rejects_empty_design_dimensions(shape, certificate):
+    X = np.zeros(shape)
+    y = np.ones(shape[0])
+    with pytest.raises(ValueError, match="positive dimensions"):
+        if certificate:
+            compute_certificate_logistic(X, y, np.zeros(shape[1]), 1.0)
+        else:
+            solve_fista_logistic(X, y, 1.0)
+
+
 def test_certificate_is_tight_at_analytic_optimum():
     lam = 0.2
     w_star = -np.log(lam / (1 - lam))

@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from optimization_math.solvers.fista_signed import solve_fista_signed
-from optimization_math.screening import column_norms_squared, compute_safe_screen
+from optimization_math.screening import compute_safe_screen
 
 HERE = Path(__file__).resolve().parent
 OUT_DIR = HERE / "out"
@@ -37,9 +37,7 @@ def make_problem(seed, *, m=80, n=200, k=15, noise=0.05):
 
 
 def benchmark_screening(seeds=(0, 1, 2, 3, 4)):
-    """For each seed, run FISTA and record, at each certificate checkpoint,
-    the gap and the fraction of coordinates safely screened (and whether any
-    true support is ever screened)."""
+    """Record final gap, screened fraction and optimum-support retention."""
     rows = []
     for seed in seeds:
         A, y, x_true, lam, lipschitz = make_problem(seed)
@@ -112,26 +110,19 @@ def _plot_screening_radius():
                              certificate_stride=1, max_iter=20000)
     # Recompute the screen at a grid of *artificial* gap values to show the
     # monotone tightening: smaller gap -> smaller radius -> more screening.
-    gaps = np.logspace(-8, 0, 40)
-    fracs = []
     # Evaluate the dual point at the optimum; vary the gap to move the radius.
     from optimization_math.certificates_signed import compute_certificate_signed
     cert = compute_certificate_signed(A, y, res.x, lam)
-    r = A @ res.x - y
-    q = A.T @ r
-    q_inf = np.linalg.norm(q, ord=np.inf)
-    theta = 1.0 if q_inf <= lam else lam / q_inf
-    nu = theta * r
-    aTnu = A.T @ nu
-    col_norms = np.sqrt(column_norms_squared(A))
-    for g in gaps:
-        r_ball = float(np.sqrt(max(2.0 * g, 0.0) / (theta * theta)))
-        margin = np.abs(aTnu) + col_norms * r_ball
-        fracs.append(float(np.mean(margin < lam)))
+    # Inflate the true absolute gap; smaller values need not be safe bounds
+    # for this fixed dual point. Use the production rule, not a second formula.
+    minimum_gap = max(cert.primal - cert.dual, 1e-8)
+    gaps = np.geomspace(minimum_gap, max(1.0, 100.0 * minimum_gap), 40)
+    fracs = [float(np.mean(compute_safe_screen(A, y, res.x, lam, gap=g)))
+             for g in gaps]
 
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.semilogx(gaps, fracs, marker="o")
-    ax.set_xlabel("relative gap (proxy for radius)")
+    ax.set_xlabel("absolute gap upper bound (illustrative sweep)")
     ax.set_ylabel("safely screened fraction")
     ax.set_title("GAP-safe screening effectiveness vs gap")
     fig.tight_layout()

@@ -49,3 +49,42 @@ def test_unconstrained_qp_reduces_to_linear_solve():
 def test_rejects_bad_bounds():
     with pytest.raises(ValueError):
         solve_qp_box(np.eye(2), np.zeros(2), l=np.array([1.0, 0.0]), u=np.array([0.0, 1.0]))
+
+
+def test_unbounded_box_certificate_is_a_true_lower_bound():
+    # f(x)=5e-13*x^2-1e-6*x has x*=1e6 and f*=-1/2.
+    cert = compute_certificate_qp([[1e-12]], [-1e-6], [0.0], None, None)
+    assert cert.dual <= -0.5 + 1e-12
+    assert cert.relative_gap >= 0.5 - 1e-12
+
+
+def test_small_gradient_does_not_certify_far_from_qp_optimum():
+    result = solve_qp_box(np.array([[1e-12]]), np.array([-1e-6]),
+                          certificate_stride=1)
+    assert result.status == "converged"
+    assert result.iterations > 0
+    np.testing.assert_allclose(result.x, [1e6], rtol=0.02)
+    assert result.certificate.primal == pytest.approx(-0.5, abs=1e-4)
+
+
+def test_linear_unbounded_qp_has_no_finite_lower_bound():
+    cert = compute_certificate_qp([[0.0]], [-1.0], [0.0], None, None)
+    assert cert.dual == -np.inf
+    assert cert.relative_gap == np.inf
+
+
+@pytest.mark.parametrize("l,u", [(None, None), ([-np.inf, 0.0], [0.0, np.inf])])
+def test_roundoff_does_not_turn_singular_q_into_positive_curvature(l, u):
+    # Q=[1,3].T@[1,3], so d=(-3,1) is an exact null direction.
+    # c.T@d=-10 makes this objective unbounded below on both boxes.
+    cert = compute_certificate_qp([[1.0, 3.0], [3.0, 9.0]],
+                                  [3.0, -1.0], [0.0, 0.0], l, u)
+    assert cert.dual == -np.inf
+    assert cert.relative_gap == np.inf
+
+
+@pytest.mark.parametrize("l,u", [([np.nan], [1.0]), ([0.0], [np.nan]),
+                                ([np.inf], [np.inf]), ([-np.inf], [-np.inf])])
+def test_certificate_rejects_invalid_bounds(l, u):
+    with pytest.raises(ValueError):
+        compute_certificate_qp([[1.0]], [0.0], [0.0], l, u)

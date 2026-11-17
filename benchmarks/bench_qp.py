@@ -96,8 +96,8 @@ def _write_report(rows):
         "",
         "## 结论",
         "",
-        "- 投影梯度（FISTA 动量）对盒约束 QP 全部收敛，KKT 与互补松弛 gap 均达标。",
-        "- 真值落于 box 边界时，投影 KKT 正确识别活动边界，恢复误差达到机器精度量级。",
+        "- 投影梯度（FISTA 动量）对盒约束 QP 全部收敛，KKT 与二次下界 gap 均达标。",
+        "- 真值由 SciPy 独立参考解给出，盒边界真实激活，恢复相对误差低于 1e-4（非机器精度）。",
         "",
     ]
     (OUT_DIR / "qp_report.md").write_text("\n".join(lines), encoding="utf-8")

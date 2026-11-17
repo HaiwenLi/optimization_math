@@ -28,7 +28,7 @@ python -m pip install -e ".[test]"
 python -m pytest -v
 ```
 
-运行时只依赖 NumPy；测试使用 pytest。
+运行时只依赖 NumPy；测试使用 pytest 与 SciPy（QP 独立参考解）。生成基准图表还需安装 `python -m pip install -e ".[test,benchmark]"`，其中包含 Matplotlib。
 
 ## 快速上手
 
@@ -101,14 +101,14 @@ print(result.x)
 | T1 带符号 LASSO/弹性网 | `fista_signed.py` | 软阈值 KKT + 对偶 gap | F1 对比非负版 |
 | T2 稀疏 logistic | `fista_logistic.py` | logistic 梯度 KKT + Fenchel 对偶 | λ-F1 非单调 |
 | T3 1D TV 去噪 | `chambolle_tv.py` | Chambolle 原始-对偶 gap | λ-误差非单调 |
-| T4 盒约束 QP/NNLS | `qp_box.py` | box KKT + 互补松弛 gap | 边界活动识别 |
+| T4 盒约束 QP/NNLS | `qp_box.py` | box KKT + 二次下界 gap | 边界活动识别 |
 | T5 group/低秩 | `fista_group.py` / `fista_nuclear.py` | 组范数 KKT / 近端不动点 | 组联合选择 / 秩恢复 |
 | 进阶：安全筛选 | `screening.py` | 复用带符号证书（对偶点/θ/gap）| 安全剔除 92–95% 坐标 |
 | 进阶：主-对偶 | `pdhg.py` | 复用带符号证书（同 FISTA 验收）| 与 FISTA 收敛到同一最优解 |
 
 ## 证书化对比协议
 
-同一问题 → 多求解器 → 五指标横向验收：**ε_KKT、相对对偶间隙、支撑 F1、幅度 RMSE、耗时**。求解器的差异不是"答案不同"（凸问题最优解唯一），而是速度、证书强度与支撑定位能力的权衡。
+同一问题 → 多求解器 → 五指标横向验收：**ε_KKT、相对对偶间隙、支撑 F1、幅度 RMSE、耗时**。凸问题不保证最优解唯一；只有满足严格凸性等条件时才能比较解向量的一致性，否则应比较目标值与证书。
 
 ## 目录结构
 
@@ -132,7 +132,7 @@ optimization_math/
 │   ├── certificates.py                # 非负 LASSO 证书
 │   ├── certificates_signed.py         # 带符号 LASSO 证书
 │   ├── certificates_logistic.py       # logistic Fenchel 对偶证书
-│   ├── certificates_qp.py             # box-QP 互补松弛证书
+│   ├── certificates_qp.py             # box-QP 二次下界证书
 │   ├── certificates_group.py          # group LASSO 证书
 │   ├── certificates_nuclear.py        # 核范数（谱）证书
 │   ├── screening.py                   # GAP-safe 安全筛选（列范数 + 安全球）
@@ -161,8 +161,9 @@ optimization_math/
 - [带符号 LASSO/弹性网（T1）](docs/survey/2026-11-17-带符号-LASSO-弹性网.md) · [稀疏 logistic（T2）](docs/survey/2026-11-17-稀疏-logistic-回归.md) · [Fused LASSO/TV 去噪（T3）](docs/survey/2026-11-17-Fused-LASSO-TV-去噪.md) · [盒约束 QP/NNLS（T4）](docs/survey/2026-11-17-盒约束-QP-NNLS.md) · [group LASSO/核范数低秩（T5）](docs/survey/2026-11-17-group-LASSO-核范数低秩.md)
 - [L2+L1 进阶算法族综述（2026-11-17）](docs/survey/2026-11-17-L2L1-进阶算法族综述.md) — 主-对偶（PDHG）、拟牛顿（OWL-QN/Prox-QN）、坐标下降、半光滑牛顿、safe screening 的收敛率与选型
 - [GAP-safe 筛选与主-对偶 PDHG 落地（2026-11-17）](docs/survey/2026-11-17-GAP-safe筛选与主对偶PDHG落地.md) — 两个算法族的原理、实现口径、实测对比（含 screening 安全口径澄清）
+- [本地正确性审查（2026-11-17）](docs/reviews/2026-11-17-local-correctness-review.md) — 已复现缺陷、修复证据与剩余限制
 
 ## 约定
 
 - 代码与文档一律使用相对路径
-- 仓库内容涉及未决专利事项，默认保持私有
+- 本仓库为公开仓库；不得提交个人信息、密钥、机器绝对路径或未获授权的专利材料。

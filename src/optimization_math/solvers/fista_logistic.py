@@ -45,6 +45,8 @@ def solve_fista_logistic(X, y, lam, *, w0=None, lipschitz=None,
     y = np.asarray(y, dtype=np.float64)
     if X.ndim != 2 or y.ndim != 1 or X.shape[0] != y.shape[0]:
         raise ValueError("X must be 2D and y 1D with matching first dimension")
+    if X.shape[0] == 0 or X.shape[1] == 0:
+        raise ValueError("X must have positive dimensions")
     if not np.all((y == 1.0) | (y == -1.0)):
         raise ValueError("y must contain only +1 and -1 labels")
     try:
@@ -61,6 +63,8 @@ def solve_fista_logistic(X, y, lam, *, w0=None, lipschitz=None,
     # Default Lipschitz: ||X||_2^2 / (4 N) bound for the normalized logistic loss.
     if lipschitz is None:
         lipschitz = float(np.linalg.norm(X, 2) ** 2) / (4.0 * X.shape[0])
+        if lipschitz == 0.0:
+            lipschitz = 1.0
     L = float(lipschitz)
 
     def _backtrack(w_inner, grad, L_inner):

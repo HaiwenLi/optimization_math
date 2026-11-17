@@ -23,7 +23,7 @@ r_{\mathrm{ball}} = \sqrt{2\,\mathrm{gap}},
 \qquad \mathrm{gap} = P(x) - D(\nu).
 \]
 
-安全性来源：强对偶下，由于对偶 `D(ν) = −½‖ν‖²+⟨b−y,ν⟩` 是 1-强凹（`∇²D = −I`），`gap` 是 `½‖ν−ν*‖²` 的上界，故最优对偶 `ν*` 落在以 `ν` 为心、`r_ball` 为半径的球内；若球与该坐标的对偶约束 `|a_iᵀν| ≤ λ` 无交集，则该坐标必为 0。注意 **`ν = θr` 本身即对偶可行点**，强凹界对任意对偶可行 `ν` 成立，故半径**不含 θ 因子**。**被剔除的坐标保证不会误删**——screening 只加速，不改变最优解。
+安全性来源：强对偶下，由于对偶 `D(ν) = −½‖ν‖²+⟨b−y,ν⟩` 是 1-强凹（`∇²D = −I`），`gap` 是 `½‖ν−ν*‖²` 的上界，故最优对偶 `ν*` 落在以 `ν` 为心、`r_ball` 为半径的球内；若整个球严格落在 `|a_iᵀν| < λ` 内而不接触约束边界，则该坐标必为 0。注意 **`ν = θr` 本身即对偶可行点**，强凹界对任意对偶可行 `ν` 成立，故半径**不含 θ 因子**。
 
 ### 1.2 实现口径（`src/optimization_math/screening.py`）
 
@@ -31,6 +31,8 @@ r_{\mathrm{ball}} = \sqrt{2\,\mathrm{gap}},
 - `compute_safe_screen(A, y, x, lam, *, mu, b, gap, theta)`：返回**安全剔除的布尔掩码**。`gap`（对偶间隙）复用 `compute_certificate_signed` 的 `primal − dual`；`θ`/`ν` 在函数内重算（`Certificate` dataclass 不含 `theta` 字段），但与证书用的是**同一套对偶构造**，语义零漂移。
 
 > 关键复用点：`dual`（进而 gap）从证书直接拿到，避免另起对偶炉灶；`θ` 与列范数是 screening 特有的量，故在此补算。
+
+> 缓存参数契约：显式 `theta` 必须在 `(0,1]` 且使对偶点可行。若未传 `gap`，必须对这个实际 `theta` 重算绝对 gap，不能套用默认证书中另一个对偶点的 gap。显式 `gap` 由调用者保证为同一问题、同一 `x/theta` 的有效绝对间隙上界，不能传归一化相对间隙。
 
 > **范围限制（本次落地明确）**：GAP-safe 半径 `r_ball=√(2·gap)` 依赖纯 LASSO 的对偶结构（`D` 为 1-强凹，`∇²D=−I`），**仅对 μ=0 成立**。弹性网的 μ‖x‖² 会扭曲对偶，`r_ball` 与 `‖ν−ν*‖²` 的 bound 关系不再成立，需要专门的 elastic-net screening 规则（Ndiaye 2017 §6 有给）。故 `compute_safe_screen` 对 `mu>0` 显式抛 `NotImplementedError`，**不静默夸大安全性保证**——这是安全筛选的底线。
 
@@ -68,7 +70,7 @@ x^{n+1} &= \operatorname{prox}_{\tau G}(x^n - \tau A^\top z^{n+1}),\\
 \end{aligned}
 \]
 
-步长条件 `τσ‖A‖² ≤ 1`（θ=1）。核心价值：**主、对偶的近端分开做，无需解任何线性系统（逆算子）**——这是 FISTA（x 步要 `(I+τ∂G)` 隐式步）与 ADMM（子求解）都不具备的性质，对 TV、去卷积等「A 无显式逆」的场景是决定性优势。
+步长条件 `τσ‖A‖² ≤ 1`（θ=1）。核心价值：**主、对偶的近端分开做，无需解线性系统**。普通 LASSO 的 FISTA 同样只需梯度和闭式软阈值，并不需要逆算子；PDHG 的结构优势主要在复合 TV 等近端不易直接计算的场景，不能把“无逆算子”说成相对 FISTA 的普遍独占优势。
 
 ### 2.2 实现口径（`src/optimization_math/solvers/pdhg.py`）
 
@@ -80,12 +82,13 @@ x^{n+1} &= \operatorname{prox}_{\tau G}(x^n - \tau A^\top z^{n+1}),\\
 
 T1 相同已知真值问题，PDHG vs FISTA：
 
-| solver | status | iters | A/Aᵀ calls | ε_KKT | rel.gap | rel.L2 | F1 |
+| solver | status | iters | 核心 A/Aᵀ 对数估算 | ε_KKT | rel.gap | rel.L2 | F1 |
 |---|---|---|---|---|---|---|---|
 | fista-signed | converged | 133 | 133 | 9.6e-6 | 9.3e-6 | 0.250 | 0.720 |
 | pdhg | converged | 197 | 197 | 8.8e-6 | 5.2e-6 | 0.250 | 0.720 |
 
 - **收敛到同一最优解**（objective、rel.L2、F1 完全一致），证书统一验收成立。
+- 表中算子对数不含证书、回溯或重启成本，不是实测总调用数。
 - 本问题上 PDHG 步数更多（197 vs 133，两者每步都是 1 对 A/Aᵀ，FISTA 另有回溯的额外 matvec），**成本不占优**——这符合预期：普通病态不强的 LASSO 是 FISTA 的主场。
 - **PDHG 的价值不在这种问题**，而在：① 无逆算子（TV/去卷积）；② saddle-point 约束结构。这印证了综述 §7 的选型表——**不是"全能更优"，而是"各有主场"**。
 

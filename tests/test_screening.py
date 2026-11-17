@@ -86,25 +86,34 @@ def test_screen_matches_explicit_radius_formula():
     and hence screen strictly *fewer* coordinates -- so this test catches the
     theta factor specifically, which the converged-iterate tests cannot.
     """
-    A, y, x_true, lam = _make_problem(seed=2, m=40, n=60, k=6)
-    # A genuinely non-optimal starting point: x = 0 (all coordinates inactive).
-    x = np.zeros_like(x_true)
-    r = A @ x - y
-    q = A.T @ r
-    q_inf = np.linalg.norm(q, ord=np.inf)
-    theta = 1.0 if q_inf <= lam else lam / q_inf
-    assert theta < 1.0, "precondition failed: need theta < 1 at x=0"
+    # Hand calculation: r=(-2,0), theta=1/2, nu=(-1,0), P=2,
+    # D=3/2, gap=1/2, radius=1. Margins are (2, 3/4).
+    # The old radius=2 yields (3, 3/2) and screens nothing.
+    A = np.diag([1.0, 0.75])
+    got = compute_safe_screen(A, [2.0, 0.0], [0.0, 0.0], 1.0)
+    assert np.array_equal(got, [False, True])
 
-    # Explicit GAP-safe rule (correct formula).
-    from optimization_math.certificates_signed import compute_certificate_signed
-    cert = compute_certificate_signed(A, y, x, lam)
-    gap = max(cert.primal - cert.dual, 0.0)
-    col_norms = np.sqrt(column_norms_squared(A))
-    nu = theta * r
-    r_ball = float(np.sqrt(2.0 * gap))
-    expected = (np.abs(A.T @ nu) + col_norms * r_ball) < lam
 
-    got = compute_safe_screen(A, y, x, lam)
-    assert np.array_equal(got, expected), (
-        "compute_safe_screen must implement r_ball = sqrt(2*gap) (no theta factor)"
-    )
+def test_supplied_theta_uses_its_own_gap():
+    # Exact optimum x*=1. A different, still feasible dual point nu=-1/2
+    # has D=7/8 and gap=5/8, NOT the default certificate's zero gap.
+    got = compute_safe_screen(np.eye(1), [2.0], [1.0], 1.0, theta=0.5)
+    assert not got[0], "a nonzero optimum coordinate must never be screened"
+
+
+@pytest.mark.parametrize("theta", [0.0, -0.1, 2.0, np.nan, np.inf])
+def test_screen_rejects_invalid_theta(theta):
+    with pytest.raises(ValueError, match="theta"):
+        compute_safe_screen(np.eye(1), [2.0], [1.0], 1.0, theta=theta)
+
+
+def test_screen_rejects_dual_infeasible_theta():
+    # theta=1 is in range but r=-2 requires theta<=1/2 for feasibility.
+    with pytest.raises(ValueError, match="theta"):
+        compute_safe_screen(np.eye(1), [2.0], [0.0], 1.0, theta=1.0)
+
+
+def test_screen_validates_background_with_cached_dual_inputs():
+    with pytest.raises(ValueError, match="finite"):
+        compute_safe_screen(np.eye(1), [2.0], [1.0], 1.0,
+                            b=[np.nan], gap=0.0, theta=1.0)
