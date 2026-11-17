@@ -159,7 +159,26 @@ def test_balance_rho_preserves_unscaled_dual_when_not_clamped():
     np.testing.assert_allclose(new_rho * new_u, 1.0 * u)
 
 
-def test_balance_rho_respects_bounds():
+def test_balance_rho_respects_bounds_and_preserves_continuity_when_clamped():
+    from optimization_math.solvers.admm import _balance_rho
+    # rho just below the upper bound, scaled past it: the clamp actually changes rho,
+    # so the unscaled dual must be rescaled to preserve rho * u.
+    u = np.array([0.5, -2.0])
+    high_rho, high_u = _balance_rho(
+        6e2, u, 100.0, 1.0,
+        rho_min=1e-3, rho_max=1e3, rho_balance=10.0, rho_scale=2.0,
+    )
+    low_rho, low_u = _balance_rho(
+        2e-3, u, 1.0, 100.0,
+        rho_min=1e-3, rho_max=1e3, rho_balance=10.0, rho_scale=2.0,
+    )
+    assert high_rho == 1e3
+    assert low_rho == 1e-3
+    np.testing.assert_allclose(high_rho * high_u, 6e2 * u)
+    np.testing.assert_allclose(low_rho * low_u, 2e-3 * u)
+
+
+def test_balance_rho_leaves_rho_and_u_unchanged_at_bounds():
     from optimization_math.solvers.admm import _balance_rho
     u = np.ones(2)
     high_rho, high_u = _balance_rho(
@@ -172,8 +191,8 @@ def test_balance_rho_respects_bounds():
     )
     assert high_rho == 1e3
     assert low_rho == 1e-3
-    np.testing.assert_allclose(high_rho * high_u, 1e3 * u)
-    np.testing.assert_allclose(low_rho * low_u, 1e-3 * u)
+    np.testing.assert_array_equal(high_u, u)
+    np.testing.assert_array_equal(low_u, u)
 
 
 def test_adaptive_rho_stays_bounded_and_converges():
@@ -191,11 +210,9 @@ def test_adaptive_rho_stays_bounded_and_converges():
 
 
 def test_adaptive_rho_converges_on_scalar_lasso():
-    # Fail-first anchor: Task 3 always raises NotImplementedError when adaptive_rho=True,
-    # so this test fails (propagates the error) until Task 4 removes the guard and
-    # adaptive rho converges to the scalar optimum.
     result = solve_admm(np.array([[1.0]]), np.array([2.0]), 0.5, adaptive_rho=True)
     assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [1.5], atol=1e-6)
 
 
 @pytest.mark.parametrize(
