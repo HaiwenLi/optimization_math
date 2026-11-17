@@ -103,6 +103,8 @@ print(result.x)
 | T3 1D TV 去噪 | `chambolle_tv.py` | Chambolle 原始-对偶 gap | λ-误差非单调 |
 | T4 盒约束 QP/NNLS | `qp_box.py` | box KKT + 互补松弛 gap | 边界活动识别 |
 | T5 group/低秩 | `fista_group.py` / `fista_nuclear.py` | 组范数 KKT / 近端不动点 | 组联合选择 / 秩恢复 |
+| 进阶：安全筛选 | `screening.py` | 复用带符号证书（对偶点/θ/gap）| 安全剔除 92–95% 坐标 |
+| 进阶：主-对偶 | `pdhg.py` | 复用带符号证书（同 FISTA 验收）| 与 FISTA 收敛到同一最优解 |
 
 ## 证书化对比协议
 
@@ -118,7 +120,9 @@ optimization_math/
 │   ├── bench_logistic.py              # T2
 │   ├── bench_tv.py                    # T3
 │   ├── bench_qp.py                    # T4
-│   └── bench_structured.py            # T5（group + 核范数）
+│   ├── bench_structured.py            # T5（group + 核范数）
+│   ├── bench_screening.py             # GAP-safe 筛选降维效果
+│   └── bench_pdhg.py                  # 主-对偶 vs FISTA
 ├── docs/
 │   ├── survey/                        # 算法调研（含 T1–T5）
 │   └── superpowers/                   # 设计规格（specs）与实施计划（plans）
@@ -131,6 +135,7 @@ optimization_math/
 │   ├── certificates_qp.py             # box-QP 互补松弛证书
 │   ├── certificates_group.py          # group LASSO 证书
 │   ├── certificates_nuclear.py        # 核范数（谱）证书
+│   ├── screening.py                   # GAP-safe 安全筛选（列范数 + 安全球）
 │   └── solvers/
 │       ├── _common.py                 # 共享校验/估计助手（私有）
 │       ├── fista.py                   # 非负 FISTA
@@ -140,7 +145,8 @@ optimization_math/
 │       ├── chambolle_tv.py            # 1D TV（Chambolle 投影）
 │       ├── qp_box.py                  # 盒约束 QP（投影梯度）
 │       ├── fista_group.py             # group LASSO FISTA
-│       └── fista_nuclear.py           # 核范数 FISTA
+│       ├── fista_nuclear.py           # 核范数 FISTA
+│       └── pdhg.py                    # 主-对偶 Chambolle-Pock
 └── tests/                             # 含证书断言的测试
 ```
 
@@ -154,6 +160,7 @@ optimization_math/
 - [算法调研扩展总路线图（2026-11-17）](docs/survey/2026-11-17-算法调研扩展总路线图.md) — 五类经典优化问题的调研/求解器/证书/基准索引
 - [带符号 LASSO/弹性网（T1）](docs/survey/2026-11-17-带符号-LASSO-弹性网.md) · [稀疏 logistic（T2）](docs/survey/2026-11-17-稀疏-logistic-回归.md) · [Fused LASSO/TV 去噪（T3）](docs/survey/2026-11-17-Fused-LASSO-TV-去噪.md) · [盒约束 QP/NNLS（T4）](docs/survey/2026-11-17-盒约束-QP-NNLS.md) · [group LASSO/核范数低秩（T5）](docs/survey/2026-11-17-group-LASSO-核范数低秩.md)
 - [L2+L1 进阶算法族综述（2026-11-17）](docs/survey/2026-11-17-L2L1-进阶算法族综述.md) — 主-对偶（PDHG）、拟牛顿（OWL-QN/Prox-QN）、坐标下降、半光滑牛顿、safe screening 的收敛率与选型
+- [GAP-safe 筛选与主-对偶 PDHG 落地（2026-11-17）](docs/survey/2026-11-17-GAP-safe筛选与主对偶PDHG落地.md) — 两个算法族的原理、实现口径、实测对比（含 screening 安全口径澄清）
 
 ## 约定
 
