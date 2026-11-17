@@ -40,3 +40,108 @@ def test_cg_ata_zero_rhs_returns_zero_without_iterations():
     np.testing.assert_array_equal(x, np.zeros(2))
     assert iterations == 0
     assert rel == 0.0
+
+
+from optimization_math.certificates import compute_certificate
+from optimization_math.solvers.admm import solve_admm
+from optimization_math.solvers.fista import lambda_max
+
+
+def test_admm_recovers_hand_derived_scalar_lasso_solution():
+    result = solve_admm(
+        np.array([[1.0]]), np.array([2.0]), 0.5,
+        rho=1.0, cg_tol=1e-12, residual_tol=1e-6,
+        certificate_stride=1, kkt_tol=1e-7, gap_tol=1e-8, max_iter=200,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [1.5], atol=1e-6)
+    assert result.certificate.kkt_residual <= 1e-7
+    assert result.certificate.relative_gap <= 1e-8
+
+
+def test_admm_recovers_scalar_elastic_net_solution():
+    result = solve_admm(
+        np.array([[1.0]]), np.array([2.0]), 0.5, mu=1.0,
+        rho=1.0, cg_tol=1e-12, residual_tol=1e-6,
+        certificate_stride=1, kkt_tol=1e-7, gap_tol=1e-8, max_iter=200,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [0.75], atol=1e-6)
+
+
+def test_admm_applies_known_background_before_fitting():
+    result = solve_admm(
+        np.array([[1.0]]), np.array([2.0]), 0.5, b=np.array([1.0]),
+        rho=1.0, cg_tol=1e-12, residual_tol=1e-6,
+        certificate_stride=1, kkt_tol=1e-7, gap_tol=1e-8, max_iter=200,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [0.5], atol=1e-6)
+
+
+def test_admm_returns_zero_at_lambda_max_without_false_iteration_work():
+    A = np.diag([1.0, 2.0])
+    y = np.array([3.0, 1.0])
+    result = solve_admm(A, y, lambda_max(A, y), rho=1.0)
+    assert result.status == "converged"
+    assert result.iterations == 0
+    np.testing.assert_array_equal(result.x, np.zeros(2))
+
+
+def test_admm_iteration_limit_does_not_claim_convergence():
+    result = solve_admm(
+        np.array([[1.0]]), np.array([2.0]), 0.1,
+        rho=1.0, max_iter=1, certificate_stride=20,
+        residual_tol=1e-12, kkt_tol=1e-12, gap_tol=1e-12,
+    )
+    assert result.status == "max_iter"
+    assert result.iterations == 1
+    assert np.isfinite(result.certificate.relative_gap)
+    assert len(result.history) == 1
+
+
+def test_admm_uses_black_box_operator_without_dense_matrix_access():
+    result = solve_admm(
+        DiagonalOperator(), np.array([3.0, 1.0]), 0.5,
+        rho=1.0, cg_tol=1e-12, residual_tol=1e-6,
+        certificate_stride=1, kkt_tol=1e-7, gap_tol=1e-8, max_iter=500,
+    )
+    assert result.status == "converged"
+    np.testing.assert_allclose(result.x, [2.5, 0.375], atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"lam": 0.0}, {"lam": 0.1, "mu": -1.0}, {"rho": 0.0},
+     {"max_iter": 0}, {"cg_max_iter": 0}, {"certificate_stride": 0},
+     {"residual_tol": 0.0}, {"kkt_tol": 0.0}, {"gap_tol": 0.0},
+     {"y": np.array([1.0, 2.0])}, {"y": np.array([np.nan])}],
+)
+def test_admm_rejects_invalid_shapes_nonfinite_data_and_controls(overrides):
+    kwargs = dict(A=np.array([[1.0]]), y=np.array([1.0]), lam=0.1)
+    kwargs.update(overrides)
+    with pytest.raises(ValueError):
+        solve_admm(**kwargs)
+
+
+def test_admm_rejects_negative_warm_start():
+    with pytest.raises(ValueError, match="nonnegative"):
+        solve_admm(np.array([[1.0]]), np.array([1.0]), 0.1, x0=np.array([-1.0]))
+
+
+def test_admm_convergence_helper_requires_residuals_and_both_certificates():
+    from optimization_math.solvers.admm import _admm_has_converged
+    cert = compute_certificate(np.array([[1.0]]), np.array([2.0]), np.array([1.5]), 0.5)
+    assert _admm_has_converged(0.0, 0.0, cert, 1e-6, 1e-6, 1e-6)
+    assert not _admm_has_converged(1.0, 0.0, cert, 1e-6, 1e-6, 1e-6)
+    assert not _admm_has_converged(0.0, 1.0, cert, 1e-6, 1e-6, 1e-6)
+    assert not _admm_has_converged(0.0, 0.0, cert, 1e-6, 1e-6, -1.0)
+    # A certificate at a non-optimal point has kkt_residual above tolerance even with
+    # zero ADMM residuals; the KKT gate must still block convergence.
+    bad_kkt = compute_certificate(np.array([[1.0]]), np.array([2.0]), np.array([0.01]), 0.5)
+    assert bad_kkt.kkt_residual > 1e-6
+    assert not _admm_has_converged(0.0, 0.0, bad_kkt, 1e-6, 1e-6, 1e-6)
+    # A certificate with a material positive gap must also block convergence.
+    bad_gap = compute_certificate(np.array([[1.0]]), np.array([2.0]), np.array([1.0]), 0.5)
+    assert bad_gap.relative_gap > 1e-8
+    assert not _admm_has_converged(0.0, 0.0, bad_gap, 1e-6, 1e-6, 1e-8)
