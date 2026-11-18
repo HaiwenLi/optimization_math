@@ -21,6 +21,90 @@ min_{o ≥ 0}  ½‖A o − y‖₂² + λ‖o‖₁        （弹性网：再�
 
 收敛不以"迭代数达到上限"或"残差变小"单独判定，一律以证书为准。
 
+## 求解与验证管线
+
+```text
+求解管线（库的核心链路）
+  问题配置            算子封装                 可插拔求解器                证书门控
+  y, A, λ, μ, b   →   as_linear_operator  →   任一 solve_*           →   双阈值同时满足才 converged
+  约束/分组/box        (只需 shape/matvec/      (FISTA/ADMM/PDHG/          kkt_residual ≤ kkt_tol
+                      rmatvec，黑盒即可)       投影梯度/Chambolle)        relative_gap ≤ gap_tol
+```
+
+- **证书按 `certificate_stride` 间隔与最终迭代点评估**，不是免费副产品；加速法在动量点算梯度时，接受点证书需额外一对 `A/Aᵀ`。
+- **实测计数**：`CountingOperator` 包裹后正演/伴随各计一次，覆盖初始化、范数估计、回溯、CG 与证书，绝不以迭代数冒充算子调用数。
+- **验证管线**（`benchmarks/bench_standard.py`）：独立最优解 fixtures（解析公式或制造 KKT，与被测求解器零耦合，输入摘要防漂移）→ 多算法同实例、同容差运行 → 目标误差/解误差/恢复误差分列验收（数据生成真值 ≠ 正则化最优解）→ JSON/Markdown/图与跟踪快照。
+
+## 算法与数学一览
+
+统一记号：$r = Ax + b - y$ 为残差。每种算法的目标、核心迭代与证书如下；完整推导见各调研文档（链接在[文档](#文档)一节）。
+
+### 非负 / 带符号 LASSO·弹性网 — FISTA（`fista.py` / `fista_signed.py`）
+
+$$\min_x\ \tfrac12\|Ax+b-y\|_2^2 + \lambda\|x\|_1 + \tfrac{\mu}{2}\|x\|_2^2\quad(\text{非负版加 } x\ge0)$$
+
+- 近端（带符号弹性网）：$\mathrm{prox}_\tau(z)=\mathrm{sign}(z)\odot\max(|z|-\tau\lambda,0)/(1+\tau\mu)$；非负版 $\max(z-\tau\lambda,0)/(1+\tau\mu)$。`lipschitz` = $\|A\|_2^2$（μ 由近端吸收）。
+- 动量 $t_{k+1}=\tfrac{1+\sqrt{1+4t_k^2}}{2}$，$z_{k+1}=x_{k+1}+\tfrac{t_k-1}{t_{k+1}}(x_{k+1}-x_k)$；梯度方向上升即自适应重启，步长可回溯。
+- 证书：$q=A^\top r+\mu x$，按活动/非活动坐标的次梯度违例归一化 KKT；对偶点 $\nu=\theta r$（$\theta$ 取对偶可行的最大值，带符号版按 $\|A^\top\nu\|_\infty\le\lambda$），$d(\theta)=-\tfrac12\theta^2(\|r\|^2+\mu\|x\|^2)+\theta\langle b-y,r\rangle$，相对 gap $=(p-d)/\max(1,|p|,|d|)$。
+
+### 三分裂 ADMM（`admm.py`）
+
+目标同上（非负）。分裂 $x=z$：$x$ 承载数据项与弹性网，$z$ 承载 $\lambda\|z\|_1+\iota_{z\ge0}$。
+
+- $x$ 步：黑盒 CG 解 $(A^\top A+(\mu+\rho)I)\,x=A^\top(y-b)+\rho(z-u)$，不组装 $A^\top A$；
+- $z$ 步闭式：$z=\max(x+u-\lambda/\rho,\,0)$；对偶上升 $u\leftarrow u+x-z$；可选自适应 $\rho$。
+- 收敛 = 归一化原始/对偶残差 **与** 证书双阈值同时满足（复用与 FISTA 相同的证书模块）。
+
+### 稀疏 logistic 回归 — FISTA（`fista_logistic.py`）
+
+$$\min_w\ \tfrac1N\sum_{i=1}^N\log\!\big(1+e^{-y_i\langle x_i,w\rangle}\big)+\lambda\|w\|_1,\quad y_i\in\{-1,+1\}$$
+
+- 光滑常数 $L=\|X\|_2^2/(4N)$（**均值**损失归一化），近端 = 软阈值。
+- 证书：$\sigma_i=\mathrm{sigmoid}(-y_i\langle x_i,w\rangle)$，梯度 $g=-\tfrac1N X^\top(y\odot\sigma)$；对偶点 $s_i=-N\theta\sigma_i$，$\theta\le\min\!\big(1/N,\ \lambda/(N\|g\|_\infty),\ 1/(N\sigma_{\max})\big)$，Fenchel 下界 $d=-\tfrac1N\sum_i\varphi^*(s_i)$。
+- 独立参考：对角设计 $X=\mathrm{diag}(a)$ 有闭式 $w_i^\star=y_i\,\log\!\big(a_i/(N\lambda)-1\big)/a_i$（$a_i>2N\lambda$，否则 $0$）。
+
+### 1D TV 去噪 — Chambolle 投影（`chambolle_tv.py`）
+
+$$\min_x\ \tfrac12\|x-y\|_2^2+\lambda_{\rm tv}\|Dx\|_1,\qquad (Dx)_i=x_{i+1}-x_i$$
+
+- 对偶迭代：$g=D\big(y-\lambda_{\rm tv}D^\top p\big)$，$p\leftarrow\dfrac{p+\tau g}{1+\tau|g|}$（保证 $|p|\le1$），步长 $\tau\le 1/(4\lambda_{\rm tv})$；复原 $x=y-\lambda_{\rm tv}D^\top p$。
+- 证书：**绝对原始-对偶 gap**，$d=\lambda_{\rm tv}\langle Dy,p\rangle-\tfrac12\|\lambda_{\rm tv}D^\top p\|^2$（差分式实现，大直流偏置下不发生灾难性相消）；`kkt_residual` 字段承载该绝对 gap，非 KKT 范数。
+
+### 盒约束 QP / NNLS — 投影梯度（`qp_box.py`）
+
+$$\min_{l\le x\le u}\ \tfrac12 x^\top Qx+c^\top x,\qquad Q\ \text{对称 PSD（入口校验，不定/非对称显式拒绝）}$$
+
+- FISTA 动量投影梯度，$L=\|Q\|_2$，近端 = box 投影 $\mathrm{clip}(z,l,u)$。
+- 证书：逐坐标 box-KKT（内点 $g_i=0$；下界处 $g_i\ge0$；上界处 $g_i\le0$）+ 可分离二次 minorant 下界 $f(x+d)\ge f(x)+g^\top d+\tfrac{m}{2}\|d\|^2$（$m=\lambda_{\min}(Q)$ 减尺度相关舍入容差）在整个 box 上最小化得到对偶界。
+
+### group LASSO — FISTA（`fista_group.py`）
+
+$$\min_x\ \tfrac12\|Ax+b-y\|_2^2+\lambda\sum_g\|x_{(g)}\|_2+\tfrac{\mu}{2}\|x\|_2^2,\qquad \text{组}=\text{完整不相交整数划分}$$
+
+- 块软阈值：$x_{(g)}\leftarrow z_{(g)}\cdot\max\!\big(0,\,1-\tau\lambda/\|z_{(g)}\|_2\big)$；$L=\|A\|_2^2+\mu$（块近端不吸收 μ，内部加）。
+- 证书：逐组次梯度违例（组内零块看 $\|g_{(g)}\|_2\le\lambda$，非零块看平行性）；对偶 $\nu=\theta r$，$\theta$ 由 $\max_g\|(A^\top r+\mu x)_{(g)}\|_2$ 确定，支持 μ、b 的弹性网推广形式。
+
+### 核范数低秩 — FISTA（`fista_nuclear.py`）
+
+$$\min_X\ \tfrac12\|\mathcal A(X)-y\|_2^2+\lambda\|X\|_*$$
+
+- 近端 = 奇异值软阈值 $S_{\tau\lambda}(Z)=U\,\mathrm{diag}(\max(\sigma-\tau\lambda,0))\,V^\top$。
+- 证书：归一化**近端不动点残差** $\|X-S_\lambda(X-\nabla f(X))\|_F/\max(1,\|X\|_F)$ + 谱可行对偶 $\|\mathcal A^*(\theta r)\|_2\le\lambda$；`kkt_residual` 亦非字面 KKT 范数。
+
+### 主-对偶 PDHG / Chambolle-Pock（`pdhg.py`）
+
+带符号 LASSO 写成鞍点 $\min_x\max_u\ \langle Ax,u\rangle-F^*(u)+G(x)$，其中 $F(z)=\tfrac12\|z+b-y\|^2$（背景 $b$ 并入数据项）、$G(x)=\lambda\|x\|_1+\tfrac{\mu}{2}\|x\|^2$。
+
+- 交替步：原始近端（含 μ 的软阈值收缩）、对偶近端 $\mathrm{prox}_{\sigma F^*}(v)=\dfrac{v-\sigma\,(y-b)}{1+\sigma}$；步长耦合 $\tau\sigma\|A\|_2^2\le1$（μ 留在强凸原始项，`lipschitz` = $\|A\|_2^2$ 仅用于耦合）。
+- 收敛门 = 与 FISTA 完全相同的带符号证书，绝不以原始/对偶残差单独判收敛。
+
+### GAP-safe 安全筛选（`screening.py`）
+
+- 对偶可行点 $\nu=\theta r$，$\theta=\min\big(1,\lambda/\|A^\top r\|_\infty\big)$（限 $\mu=0$：弹性网会扭曲对偶球，显式拒绝而非冒充安全）。
+- 安全球半径 $r_{\rm ball}=\sqrt{2\,\mathrm{gap}}$（无 θ 因子：$\nu=\theta r$ 本身已对偶可行）。
+- 剔除规则：$|a_i^\top\nu|+\|a_i\|\,r_{\rm ball}<\lambda\ \Rightarrow\ x_i^\star=0$；实测安全剔除 92–95% 坐标且零误筛。
+
+
 ## 安装与测试
 
 ```powershell
