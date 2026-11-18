@@ -32,8 +32,45 @@ from optimization_math.solvers.qp_box import solve_qp_box
 CERT_TOL = 1e-6
 OBJECTIVE_TOL = 1e-6
 SOLUTION_TOL = 1e-3
+# Identity proximal maps are exact to roundoff after one step; two-point TV
+# is iterative, so its solution gate is looser while the objective gate stays.
+EXACT_PROX_SOLUTION_TOL = 1e-9
+TV_SOLUTION_TOL = 1e-5
 OPTIONS = dict(max_iter=30000, kkt_tol=CERT_TOL, gap_tol=CERT_TOL, certificate_stride=5)
 SCIPY_NATIVE_OPTIONS = dict(ftol=1e-15, gtol=1e-11, maxls=50)
+# ADMM inner CG must be far tighter than the outer certificate target.
+ADMM_OPTIONS = dict(cg_tol=1e-12, residual_tol=1e-6)
+# Exhaustive on purpose: an unknown problem must fail loud, never fall through
+# to a generic label or a wrong tolerance.
+_CERTIFICATE_SEMANTICS = {
+    "signed_lasso": "repository problem-specific KKT residual; relative_gap is normalized",
+    "nonnegative_lasso": "repository problem-specific KKT residual; relative_gap is normalized",
+    "box_qp": "repository problem-specific KKT residual; relative_gap is normalized",
+    "nnls": "repository problem-specific KKT residual; relative_gap is normalized",
+    "logistic": "repository problem-specific KKT residual; relative_gap is normalized",
+    "tv": "absolute_primal_dual_gap (not a KKT norm)",
+    "nuclear": "normalized Frobenius proximal fixed-point residual",
+    "group": "repository problem-specific KKT residual; relative_gap is normalized",
+}
+_SOLUTION_LIMITS = {
+    "signed_lasso": SOLUTION_TOL, "nonnegative_lasso": SOLUTION_TOL,
+    "box_qp": SOLUTION_TOL, "nnls": SOLUTION_TOL, "logistic": SOLUTION_TOL,
+    "tv": TV_SOLUTION_TOL,
+    "group": EXACT_PROX_SOLUTION_TOL, "nuclear": EXACT_PROX_SOLUTION_TOL,
+}
+# Only TV's stationarity field is an absolute gap, so only its KKT gate scales
+# with the objective magnitude. Exhaustive for the same fail-loud reason.
+_KKT_SCALES_WITH_OBJECTIVE = {problem: problem == "tv"
+                              for problem in _SOLUTION_LIMITS}
+# Which algorithms compete on which problem (single source for benchmarking
+# and dispatch validation; unknown pairs fail loud in _run).
+_ALGORITHMS = {
+    "signed_lasso": ("fista_signed", "pdhg"),
+    "nonnegative_lasso": ("fista", "admm"),
+    "box_qp": ("qp_box", "scipy_lbfgsb"), "nnls": ("qp_box", "scipy_lbfgsb"),
+    "logistic": ("fista_logistic", "scipy_lbfgsb"),
+    "tv": ("chambolle_tv",), "group": ("fista_group",), "nuclear": ("fista_nuclear",),
+}
 
 
 class CountingOperator:
@@ -98,7 +135,7 @@ class StandardRun:
     history: tuple[HistoryPoint, ...]
     input_digest: str
     certificate_semantics: str
-    configuration: tuple[tuple[str, float | int], ...]
+    configuration: dict[str, float | int]
 
     def to_dict(self):
         return asdict(self)
@@ -195,10 +232,13 @@ def _scipy(case, *, max_iter=30000, kkt_tol=CERT_TOL, gap_tol=CERT_TOL,
 
 
 def _run(case, algorithm):
+    if algorithm not in _ALGORITHMS[case.problem]:
+        raise ValueError(f"algorithm {algorithm!r} is not a competitor for "
+                         f"problem {case.problem!r}")
     op = None
     config = dict(OPTIONS)
     if algorithm == "admm":
-        config.update(cg_tol=1e-12, residual_tol=1e-6)
+        config.update(ADMM_OPTIONS)
     elif algorithm == "scipy_lbfgsb":
         config.update(maxiter=OPTIONS["max_iter"], **SCIPY_NATIVE_OPTIONS)
     elif algorithm == "chambolle_tv":
@@ -216,7 +256,7 @@ def _run(case, algorithm):
                 result = solve_fista_group(op, case.y, case.lam, case.groups, **kwargs)
             else:
                 if algorithm == "admm":
-                    kwargs.update(cg_tol=1e-12, residual_tol=1e-6)
+                    kwargs.update(ADMM_OPTIONS)
                 result = solvers[algorithm](op, case.y, case.lam, **kwargs)
             x = result.x
         elif case.problem in ("box_qp", "nnls"):
@@ -243,11 +283,7 @@ def _run(case, algorithm):
     elapsed = perf_counter() - start
     objective, reference = case.objective(x), case.objective(case.x_opt)
     error = abs(objective - reference)
-    semantics = (
-        "absolute_primal_dual_gap (not a KKT norm)" if case.problem == "tv"
-        else "normalized Frobenius proximal fixed-point residual" if case.problem == "nuclear"
-        else "repository problem-specific KKT residual; relative_gap is normalized"
-    )
+    semantics = _CERTIFICATE_SEMANTICS[case.problem]
     return StandardRun(
         case.problem, case.name, case.seed, case.conditioning, case.mu, case.lam,
         algorithm, case.reference_type, status, int(iterations), elapsed,
@@ -256,7 +292,7 @@ def _run(case, algorithm):
         None if case.truth is None else float(np.linalg.norm(x-case.truth)/max(1., np.linalg.norm(case.truth))),
         float(cert.kkt_residual), float(cert.relative_gap),
         None if op is None else op.forward_calls, None if op is None else op.adjoint_calls,
-        history, case.input_digest, semantics, tuple(sorted(config.items())),
+        history, case.input_digest, semantics, dict(sorted(config.items())),
     )
 
 
@@ -266,13 +302,7 @@ def benchmark_standard(seeds=(0, 1, 2), conditions=(1., 10., 100.)):
     Does not suppress failed runs or assert, so callers can inspect/report failures.
     Independent exact references are metadata, not timed iterative competitors.
     """
-    algorithms = {
-        "signed_lasso": ("fista_signed", "pdhg"),
-        "nonnegative_lasso": ("fista", "admm"),
-        "box_qp": ("qp_box", "scipy_lbfgsb"), "nnls": ("qp_box", "scipy_lbfgsb"),
-        "logistic": ("fista_logistic", "scipy_lbfgsb"),
-        "tv": ("chambolle_tv",), "group": ("fista_group",), "nuclear": ("fista_nuclear",),
-    }
+    algorithms = _ALGORITHMS
     return [_run(case, algorithm) for case in make_standard_cases(seeds, conditions)
             for algorithm in algorithms[case.problem]]
 
@@ -281,6 +311,13 @@ def _assert_benchmark(rows):
     assert rows, "empty benchmark matrix"
     for row in rows:
         label = f"{row.case}/{row.algorithm}"
+        try:
+            solution_limit = _SOLUTION_LIMITS[row.problem]
+        except KeyError:
+            raise AssertionError(
+                f"{label}: unknown problem {row.problem!r}; add it to "
+                "_SOLUTION_LIMITS, _CERTIFICATE_SEMANTICS and _ALGORITHMS "
+                "in benchmarks/bench_standard.py") from None
         values = (row.objective, row.reference_objective, row.absolute_objective_error,
                   row.normalized_objective_error, row.solution_error, row.kkt_residual,
                   row.relative_gap, row.time_sec)
@@ -288,15 +325,12 @@ def _assert_benchmark(rows):
         assert row.status == "converged", f"{label}: {row.status}"
         assert row.time_sec >= 0 and row.iterations >= 0, label
         assert row.normalized_objective_error <= OBJECTIVE_TOL, f"{label}: objective error"
-        # Identity proximal maps are exact to roundoff after one step. Two-point
-        # TV is iterative, so allow 1e-5 while retaining the 1e-6 objective gate.
-        solution_limit = (1e-9 if row.problem in ("group", "nuclear")
-                          else 1e-5 if row.problem == "tv" else SOLUTION_TOL)
         assert row.solution_error <= solution_limit, f"{label}: solution error {row.solution_error}"
         assert -1e-12 <= row.relative_gap <= CERT_TOL, f"{label}: gap {row.relative_gap}"
         # TV stops on relative gap; its kkt_residual is the unnormalized gap.
-        kkt_limit = CERT_TOL * max(1., abs(row.objective)) if row.problem == "tv" else CERT_TOL
-        assert 0 <= row.kkt_residual <= kkt_limit, f"{label}: certificate {row.kkt_residual}"
+        limit_scale = max(1., abs(row.objective)) if _KKT_SCALES_WITH_OBJECTIVE[row.problem] else 1.
+        assert 0 <= row.kkt_residual <= CERT_TOL * limit_scale, \
+            f"{label}: certificate {row.kkt_residual}"
         assert row.history and all(np.isfinite(
             (h.objective, h.kkt_residual, h.relative_gap)).all() for h in row.history), label
         if row.recovery_error is not None:
@@ -308,8 +342,15 @@ def main(argv=None):
     parser.add_argument("--out-dir", default="benchmarks/out/standard")
     args = parser.parse_args(argv)
     out = Path(args.out_dir)
-    if out.is_absolute() or ".." in out.parts:
-        parser.error("--out-dir must be a relative path without '..'")
+    # anchor catches Windows drive-absolute/relative and UNC forms that
+    # is_absolute() alone misses; '.' would overwrite repository-root files;
+    # whitespace-only or padded parts only create oddly named directories.
+    if (out.anchor or out.is_absolute() or ".." in out.parts or out == Path(".")
+            or any(not part.strip() or part != part.strip()
+                   or part.endswith((".", " ")) for part in out.parts)):
+        parser.error("--out-dir must be a relative subdirectory inside the "
+                     "repository, without '..', '.', absolute forms or "
+                     "whitespace-padded components")
     from benchmarks.standard_report import write_standard_report
 
     rows = benchmark_standard()

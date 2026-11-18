@@ -12,15 +12,19 @@ def compute_certificate_nuclear(A, y, X, lam, *, stage=0, iteration=0):
 
     min 0.5||A(X) - y||^2 + lam||X||_*, A linear on X (matrix).
 
-    KKT: A*(A(X)-y) + lam (U V^T) = 0 where U,V are the X's singular vectors
-    on the nonzero singular part; residual measured by the spectral norm of the
-    complement. Dual gap via singular-value soft-thresholding.
+    Stationarity is measured by the normalized proximal fixed-point residual
+    ||X - S_lam(X - grad)||_F / max(1, ||X||_F), which goes to zero exactly at
+    the optimum and avoids the subdifferential-subspace decomposition. The
+    dual bound uses spectral feasibility of A*(theta*r); ``kkt_residual`` is
+    therefore NOT a KKT norm like the LASSO certificates.
     """
     A = as_matrix_operator(A)
     y = np.asarray(y, dtype=np.float64)
     X = np.asarray(X, dtype=np.float64)
     if X.ndim != 2:
         raise ValueError("X must be a 2D matrix")
+    if X.shape != tuple(A.shape):
+        raise ValueError("X must match A's matrix shape")
     try:
         lam = float(lam)
     except (TypeError, ValueError):
@@ -29,11 +33,13 @@ def compute_certificate_nuclear(A, y, X, lam, *, stage=0, iteration=0):
         raise ValueError("lam must be a positive number")
     if not np.all(np.isfinite(y)) or not np.all(np.isfinite(X)):
         raise ValueError("y and X must be finite")
-    r = A.matvec(X) - y
+    out = A.matvec(X)
+    if y.ndim != 1 or y.shape[0] != out.shape[0]:
+        raise ValueError("y must be a 1D vector matching A's output size")
+    r = out - y
     grad = A.rmatvec(r)
     primal = 0.5 * np.dot(r, r) + lam * np.sum(np.linalg.svd(X, compute_uv=False))
 
-    U, s, Vt = np.linalg.svd(X, full_matrices=False)
     # KKT via proximal fixed point: X = S_lam(X - grad) at the optimum. The
     # residual ||X - S_lam(X - grad)||_F goes to zero exactly at optimality and
     # avoids the sub-differential subspace decomposition.

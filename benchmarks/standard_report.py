@@ -7,13 +7,15 @@ import platform
 import numpy as np
 
 from benchmarks.bench_standard import (
-    CERT_TOL, OBJECTIVE_TOL, SOLUTION_TOL, _assert_benchmark,
+    CERT_TOL, EXACT_PROX_SOLUTION_TOL, OBJECTIVE_TOL, SOLUTION_TOL,
+    TV_SOLUTION_TOL, _assert_benchmark,
 )
 
 COLORS = {
     "fista": "#236b9b", "fista_signed": "#236b9b", "fista_logistic": "#236b9b",
     "qp_box": "#236b9b", "admm": "#2c8a59", "pdhg": "#bf641f",
-    "scipy_lbfgsb": "#76508e",
+    "scipy_lbfgsb": "#76508e", "chambolle_tv": "#8a6d2f",
+    "fista_group": "#5a7d2a", "fista_nuclear": "#2a5d8a",
 }
 
 
@@ -131,7 +133,7 @@ def _plot_convergence(rows, path, plt):
                 continue
             ax.semilogy([p[0] for p in points], [p[1] for p in points],
                         label=row.algorithm, linewidth=1.7,
-                        color=COLORS.get(row.algorithm))
+                        color=COLORS[row.algorithm])
             plotted = True
         ax.set_title(f"{problem}: seed {exemplar.seed}, scale {exemplar.conditioning:g}",
                      fontsize=12)
@@ -166,8 +168,11 @@ def _plot_calls(rows, path, plt):
                                      for r in selected if r.algorithm == algorithm
                                      and r.conditioning == condition]))
                      for condition in conditions]
-            ax.loglog(conditions, calls, "o-", label=algorithm, color=COLORS.get(algorithm))
-        ax.set_title(f"{problem}: lambda=0.1, mu=0", fontsize=12)
+            ax.loglog(conditions, calls, "o-", label=algorithm, color=COLORS[algorithm])
+        lams = sorted({r.lam for r in selected})
+        lam_label = (f"lambda={lams[0]:g}" if len(lams) == 1
+                     else "lambda=" + "/".join(f"{v:g}" for v in lams))
+        ax.set_title(f"{problem}: {lam_label}, mu=0", fontsize=12)
         ax.set_xlabel("Unregularized Hessian condition target")
         ax.set_ylabel("Measured forward + adjoint calls (median over seeds)")
         ax.grid(alpha=.2)
@@ -200,8 +205,9 @@ def write_standard_report(rows, out_dir):
                        scipy=scipy.__version__, matplotlib=matplotlib.__version__)
     data = dict(schema_version=1, environment=environment, summary=summary,
                 tolerances=dict(certificate=CERT_TOL, objective=OBJECTIVE_TOL,
-                                solution=SOLUTION_TOL, exact_prox_solution=1e-9,
-                                tv_solution=1e-5),
+                                solution=SOLUTION_TOL,
+                                exact_prox_solution=EXACT_PROX_SOLUTION_TOL,
+                                tv_solution=TV_SOLUTION_TOL),
                 seeds=sorted({r.seed for r in rows}),
                 conditioning=sorted({r.conditioning for r in rows}),
                 failures=failures, runs=[r.to_dict() for r in rows])
@@ -235,7 +241,8 @@ def write_standard_report(rows, out_dir):
         "large-scale performance benchmark.",
         f"- Certificate and normalized objective tolerances: `{CERT_TOL:g}`.",
         f"- Normalized solution tolerance: `{SOLUTION_TOL:g}`; "
-        "identity group/nuclear cases `1e-9`; two-point TV `1e-5`.",
+        f"identity group/nuclear cases `{EXACT_PROX_SOLUTION_TOL:g}`; "
+        f"two-point TV `{TV_SOLUTION_TOL:g}`.",
         "- Objective error denominator: `max(1, abs(f_star))`; solution error "
         "denominator: `max(1, norm(x_star))`.",
         "- Wall time includes solver certificate work and SciPy callback certificates, "
@@ -258,9 +265,14 @@ def write_standard_report(rows, out_dir):
         "|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for (problem, algorithm), group in _groups(rows).items():
-        calls = ("n/a" if group[0].forward_calls is None else
-                 f"{np.median([r.forward_calls for r in group]):g} / "
-                 f"{np.median([r.adjoint_calls for r in group]):g}")
+        counts = [r.forward_calls for r in group]
+        adjoints = [r.adjoint_calls for r in group]
+        if all(c is None for c in counts):
+            calls = "n/a"
+        elif any(c is None for c in counts) or any(a is None for a in adjoints):
+            calls = "mixed (n/a)"
+        else:
+            calls = f"{np.median(counts):g} / {np.median(adjoints):g}"
         lines.append(f"| {problem} | {algorithm} | {len(group)} | "
                      f"{_summary_cell([r.normalized_objective_error for r in group], max)} | "
                      f"{_summary_cell([r.solution_error for r in group], max)} | "

@@ -73,6 +73,103 @@ intentional callback exit, recorded configuration and propagation of
 unrelated errors. Independent reviewers approved both the mathematical
 references and the scoped production fixes after these corrections.
 
+## EGM Goldfish review round (2026-11-18)
+
+A four-persona fresh-context Goldfish review (EGM protocol: hostile design
+critic, structural, docs-vs-code, zoom-out architect) audited the whole tree
+and produced 1 Blocker, 5 Major, 12 Nit findings. All were reproduced or
+refuted by probe before action; items that did not reproduce were dropped.
+
+Fixed with red-to-green regressions (31 new regression cases in
+`tests/test_egm_regressions.py` — 28 platform-independent plus 3
+Windows-only argument cases; suite passes with warnings as errors, 303 on
+this machine; matrix still 177/177; snapshot resynced):
+
+- **QP false optimality on indefinite/asymmetric Q (Blocker).**
+  `solve_qp_box(diag(1,-1), 0)` returned `converged` with gap exactly zero on
+  an unbounded problem, and an asymmetric Q received a finite "dual bound"
+  from the minorant of a different matrix (eigvalsh reads one triangle).
+  Both entry points now share `_validate_qp_hessian`: symmetric up to a
+  scale-dependent roundoff allowance, positive semidefinite up to the same
+  eigensolver allowance; roundoff-level cases and singular PSD stay accepted.
+- **`solve_fista_group` lipschitz contract divergence (Major).** The default
+  estimate added mu while a user-supplied value was used raw, so the sibling
+  convention (`lipschitz = ||A||^2`) diverged to overflow for mu=20. Supplied
+  values now follow the shared `||A||^2` convention with mu added internally;
+  every solver docstring now states its `lipschitz` units and `b` support.
+- **Permissive benchmark defaults (Major).** The certificate-semantics label
+  and the solution-tolerance gate were hand-maintained conditionals whose
+  else-branches silently accepted unknown problems (mislabeling artifacts, or
+  a 1000x looser solution gate). Both are now exhaustive mappings that raise
+  `KeyError` on unknown problems.
+- **`--out-dir` guard (Major).** `Path('/abs').is_absolute()` is False on
+  Windows, so `/x` escaped to the drive root, `C:x` was drive-relative, and
+  `--out-dir .` would overwrite repository-root files. The guard now rejects
+  any anchored/absolute path, `..`, and `.`, with argument-rejection tests.
+- **Nuclear module (Major + Nit).** The public docstring claimed a "spectral
+  norm of the complement" residual the code never computed; it now states the
+  normalized Frobenius proximal fixed-point residual, and the protocol
+  document warns about nuclear alongside TV. Matrix shapes of `X`/`X0` are
+  validated at entry instead of surfacing as broadcast errors.
+- **README navigation (Major).** The directory tree omitted the three
+  standard-comparison modules and their tests; now listed.
+- **Reporter robustness/usability (Nits).** Special tolerances and the ADMM
+  configuration are single-sourced constants; the operator-calls title
+  derives its lambda from the data; `configuration` serializes as a JSON
+  object; mixed counted/uncounted groups render `mixed (n/a)` instead of
+  crashing; matplotlib joined the test extra so report regressions cannot
+  silently skip; the legacy signed-LASSO figure notes the two curves are
+  different objectives; a dangling sentence fragment in the protocol doc was
+  repaired and the group-dual survey documents the elastic-net/offset form.
+
+Declined as accepted trade-offs (recorded, not lost): a per-problem semantics
+tag on the `Certificate` dataclass (public API churn; consumers now fail
+loud), unifying the nine result dataclasses (all current misreads fail loud),
+consolidating the seven input validators (refactor without a failing
+regression), and moving review diffs out of the ignored out directory.
+
+Two reviewers independently verified the counter infrastructure has no bypass
+and that fixture references are genuinely independent re-derivations; the
+docs-vs-code auditor recomputed every results-table cell from tracked
+metrics.json and matched all 13 rows.
+
+## EGM Round 2 verification (2026-11-18)
+
+A second fresh-context swarm re-audited the fixed tree. All Round 1 fixes
+were verified by probe: the QP validator's acceptance boundary sits exactly
+at the 8*eps*n*max|eigenvalue| allowance (accepts -3.5e-15, rejects -1e-14);
+the group-FISTA step change altered no existing caller (estimate path
+byte-identical; all explicit-lipschitz callers use mu=0 or oversized values);
+the exhaustive mappings cover exactly the eight fixture problems; the
+out-dir guard rejects every escape form tried on Windows; regenerated PNGs
+are byte-identical and the snapshot differs from fresh generation only in
+timing columns.
+
+Round 2 found no Blockers and one Major: the mixed-count regression test
+passed on pre-fix code (its two rows formed separate all-uncounted groups,
+and the assertion matched boilerplate text). The test now builds a genuinely
+mixed group in both orderings and asserts the `mixed (n/a)` cell. Round 2
+hardening applied on top: exhaustive KKT-gate mapping, module-level
+algorithm-competitor map with dispatch validation (misspelled algorithm
+names fail loud), actionable unknown-problem message naming the dicts to
+update, whitespace/trailing-dot out-dir component rejection, fail-loud
+color lookup, and fixture problem-name validation in `StandardCase`.
+Remaining Round 2 nits recorded as accepted: the round-2 review diff
+excluded the untracked test file and resynced snapshot by construction
+(the commit contains both), and a boundary-tightening of the QP acceptance
+test documents the exact allowance.
+
+Round 2 solver-math verification also probed and cleared the TV default
+step size (monotone gap decay to n=20000), dual-bound validity on 1600+
+random cases across all six certificates, screening safety (200 trials,
+zero unsafe screens), and QP optima against SciPy on 300 random problems
+(worst excess 1.8e-15). Final touch-ups from that pass: the nuclear
+certificate now validates y's size explicitly (loudness no longer depends
+on a downstream dot), a dead SVD call was removed, the group-dual survey
+and code comment label the dual point as nu = theta r (the value was
+always computed at that point), and the TV/PDHG docstrings state their
+(no) step knobs explicitly.
+
 ## Evidence
 
 - [Reference derivations and protocol](../benchmarks/standard-optimization-comparisons.md).

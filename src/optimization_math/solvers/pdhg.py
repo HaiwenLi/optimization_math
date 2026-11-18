@@ -64,7 +64,11 @@ def solve_pdhg(A, y, lam, *, mu=0.0, b=None, x0=None, tau=None, sigma=None,
 
     Convergence is gated on the signed-LASSO certificate (KKT + relative dual
     gap), exactly as FISTA -- the iterate is declared "converged" only when the
-    *certificate* is satisfied, never from a raw residual.
+    *certificate* is satisfied, never from a raw residual. ``lipschitz`` is
+    ||A||^2 of A (used only for the tau*sigma*||A||^2 <= 1 coupling; the ridge
+    term mu stays in the strongly convex primal term); ``b`` is an optional
+    output-space offset. ``total_iterations`` mirrors ``iterations`` (PDHG
+    has no continuation stages).
     """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")

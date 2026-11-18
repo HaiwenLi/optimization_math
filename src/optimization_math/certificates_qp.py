@@ -3,6 +3,31 @@ from optimization_math.certificates import Certificate
 import numpy as np
 
 
+def _validate_qp_hessian(Q):
+    """Enforce the symmetric-PSD contract behind the minorant lower bound.
+
+    The separable quadratic minorant is a valid global lower bound only for
+    symmetric positive semidefinite Q. An indefinite Q has saddle points the
+    gradient cannot distinguish from optima, and an asymmetric Q makes the
+    minorant (built from the symmetric triangle eigvalsh reads) certify a
+    different function than the gradient uses. Tolerances are scale-dependent
+    roundoff allowances, so numerically PSD matrices stay accepted.
+    """
+    if not np.all(np.isfinite(Q)):
+        raise ValueError("Q must be finite")
+    n = Q.shape[0]
+    scale = float(np.max(np.abs(Q)))
+    if float(np.max(np.abs(Q - Q.T))) > 8.0 * np.finfo(float).eps * n * scale:
+        raise ValueError("Q must be symmetric; symmetrize explicitly for "
+                         "asymmetric inputs")
+    eigenvalues = np.linalg.eigvalsh(Q)
+    roundoff = 8.0 * np.finfo(float).eps * n * np.max(np.abs(eigenvalues))
+    if float(eigenvalues[0]) < -roundoff:
+        raise ValueError("Q must be positive semidefinite; the minorant dual "
+                         "is not a valid lower bound for indefinite Q")
+    return eigenvalues
+
+
 def compute_certificate_qp(Q, c, x, l, u, *, stage=0, iteration=0):
     """Box-constrained QP optimality certificate.
 
@@ -22,6 +47,7 @@ def compute_certificate_qp(Q, c, x, l, u, *, stage=0, iteration=0):
         raise ValueError("c and x must match Q's dimension")
     if not np.all(np.isfinite(Q)) or not np.all(np.isfinite(c)) or not np.all(np.isfinite(x)):
         raise ValueError("Q, c, x must be finite")
+    eigenvalues = _validate_qp_hessian(Q)
 
     # Bounds default to (-inf, +inf).
     l = np.full(n, -np.inf) if l is None else np.asarray(l, dtype=np.float64)
@@ -54,7 +80,7 @@ def compute_certificate_qp(Q, c, x, l, u, *, stage=0, iteration=0):
     # Minimize this minorant over l-x <= d <= u-x. Unlike assigning
     # multipliers to nonexistent infinite bounds, this is a genuine lower
     # bound away from stationarity as well as at an optimum.
-    eigenvalues = np.linalg.eigvalsh(Q)
+    # _validate_qp_hessian already ran eigvalsh; reuse its eigenvalues.
     # A mathematically zero eigenvalue may round slightly positive. Subtract
     # a scale-dependent eigensolver roundoff allowance before using curvature;
     # otherwise an unbounded singular QP could receive a finite "lower bound".

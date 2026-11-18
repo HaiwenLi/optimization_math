@@ -75,7 +75,7 @@ def compute_certificate_group(A, y, x, lam, groups, *, mu=0.0, b=None, stage=0, 
         max_viol = max(max_viol, viol)
     kkt = max_viol / max(lam, max_gnorm)
 
-    # Dual: nu = -theta r, theta from the group gradient g = A^T r + mu x,
+    # Dual: nu = theta r, theta from the group gradient g = A^T r + mu x,
     # mirroring the reference certificate's use of q = A^T r + mu x for theta.
     max_group_gnorm = max((float(np.linalg.norm(g[s])) for s in slices), default=0.0)
     theta = 1.0 if max_group_gnorm <= lam else lam / max_group_gnorm

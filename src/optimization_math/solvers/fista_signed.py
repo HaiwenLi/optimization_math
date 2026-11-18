@@ -74,6 +74,11 @@ def solve_fista_signed(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
                        max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
                        certificate_stride=10, power_iter=50, power_tol=1e-6,
                        restart=True, backtracking=True):
+    """Signed LASSO / elastic net via FISTA with backtracking and restarts.
+
+    ``lipschitz`` is the squared spectral norm ||A||^2 of A (``mu`` is
+    absorbed in the proximal map); ``b`` is an optional output-space offset.
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     power_iter = _positive_int(power_iter, "power_iter")

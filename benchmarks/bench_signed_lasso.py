@@ -157,11 +157,11 @@ def _plot_convergence():
         ax[0].semilogy(xs, kkts, label=name)
         ax[1].semilogy(xs, gaps, label=name)
 
-    ax[0].set_title("KKT residual vs iteration")
+    ax[0].set_title("KKT residual vs iteration (different objectives)")
     ax[0].set_xlabel("iteration")
     ax[0].set_ylabel(r"$\varepsilon_{\mathrm{KKT}}$")
     ax[0].legend()
-    ax[1].set_title("relative dual gap vs iteration")
+    ax[1].set_title("relative dual gap vs iteration (different objectives)")
     ax[1].set_xlabel("iteration")
     ax[1].set_ylabel("relative gap")
     ax[1].legend()

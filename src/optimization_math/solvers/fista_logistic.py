@@ -34,6 +34,11 @@ def _logistic_loss_and_grad(X, y, w):
 def solve_fista_logistic(X, y, lam, *, w0=None, lipschitz=None,
                          max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
                          certificate_stride=10, restart=True, backtracking=True):
+    """Sparse logistic regression (mean log-loss, labels in {-1, +1}) via FISTA.
+
+    ``lipschitz`` is the smoothness constant of the *normalized* loss,
+    ||X||_2^2 / (4N); there is no output offset b for a classifier.
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     kkt_tol = _positive_float(kkt_tol, "kkt_tol")

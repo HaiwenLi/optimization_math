@@ -60,7 +60,11 @@ def certificate_tv_chambolle(D, y, x, lam_tv, p):
 
 
 def solve_tv_chambolle(y, lam_tv, *, tau=None, tol=1e-5, max_iter=5000):
-    """Chambolle-projection TV denoiser with certificate-gated convergence."""
+    """Chambolle-projection TV denoiser with certificate-gated convergence.
+
+    Pure denoising form: exposes neither a ``lipschitz`` step knob nor an
+    output offset ``b`` (the step is tau = 1/(4*lam_tv) by default).
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     tol = _positive_float(tol, "tol")
     y = np.asarray(y, dtype=np.float64)

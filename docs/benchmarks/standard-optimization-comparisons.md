@@ -63,8 +63,9 @@ performance.
 The selected references have unique optima; convexity alone would not
 justify comparing solution vectors in a nonunique problem.
 
-TV's certificate stationarity field is an absolute primal-dual gap, not
-the same KKT norm used by LASSO. SciPy optimizer success is not sufficient:
+TV's certificate stationarity field is an absolute primal-dual gap, and
+nuclear's is a normalized Frobenius proximal fixed-point residual; neither
+is the same KKT norm used by LASSO. SciPy optimizer success is not sufficient:
 the returned point is also checked against the known optimum and the
 applicable certificate.
 
@@ -116,7 +117,9 @@ singular vectors and prescribed singular values `s`. Its reference is
 constructed from those vectors with singular values
 `max(s-lambda,0)`, independently of the production singular-threshold
 helper.
-its result must also meet the comparison's accuracy and certificate checks.
+
+A returned SciPy optimizer point must also meet the comparison's accuracy
+and certificate checks; native success alone is not sufficient.
 Runtime is descriptive, machine-dependent evidence, not a pass/fail gate.
 Small cases do not establish large-scale performance.
 

@@ -134,7 +134,10 @@ optimization_math/
 │   ├── bench_qp.py                    # T4
 │   ├── bench_structured.py            # T5（group + 核范数）
 │   ├── bench_screening.py             # GAP-safe 筛选降维效果
-│   └── bench_pdhg.py                  # 主-对偶 vs FISTA
+│   ├── bench_pdhg.py                  # 主-对偶 vs FISTA
+│   ├── standard_problems.py           # 标准问题：独立最优解 fixtures
+│   ├── bench_standard.py              # 标准问题跨算法对比 runner
+│   └── standard_report.py             # 结果报告（JSON/Markdown/图）
 ├── docs/
 │   ├── survey/                        # 算法调研（含 T1–T5）
 │   └── superpowers/                   # 设计规格（specs）与实施计划（plans）
@@ -160,6 +163,9 @@ optimization_math/
 │       ├── fista_nuclear.py           # 核范数 FISTA
 │       └── pdhg.py                    # 主-对偶 Chambolle-Pock
 └── tests/                             # 含证书断言的测试
+    ├── test_standard_comparisons.py   # 独立最优解对比矩阵验收
+    ├── test_standard_regressions.py   # group 分区 / TV 偏移数值回归
+    └── test_standard_report.py        # 报告渲染与失败保留
 ```
 
 ## 文档

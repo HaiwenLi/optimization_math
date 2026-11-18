@@ -40,6 +40,11 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
 
     Each group must be nonempty and every coordinate must occur exactly once.
     Overlapping groups and layouts with unpenalized coordinates are unsupported.
+
+    ``lipschitz`` follows the shared solver convention: the squared spectral
+    norm ||A||^2 of A. The ridge weight ``mu`` is added internally because the
+    group proximal map does not absorb it. An optional output offset ``b`` is
+    supported.
     """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
@@ -73,9 +78,11 @@ def solve_fista_group(A, y, lam, groups, *, mu=0.0, b=None, x0=None, lipschitz=N
     if not np.isfinite(lam) or not np.isfinite(mu) or lam <= 0 or mu < 0:
         raise ValueError("lam must be positive and mu must be nonnegative")
 
-    L = float(lipschitz) if lipschitz is not None else _estimate_lipschitz(
-        op, power_iter=power_iter, power_tol=power_tol
-    ) + mu
+    # The prox does not absorb mu, so the smooth-part curvature is ||A||^2+mu
+    # whichever way L is obtained: user-supplied values follow the shared
+    # ||A||^2 convention (adding mu here keeps the contract uniform).
+    L = (float(lipschitz) if lipschitz is not None
+         else _estimate_lipschitz(op, power_iter=power_iter, power_tol=power_tol)) + mu
 
     z = x.copy()
     momentum = 1.0

@@ -34,6 +34,14 @@ def tv_optimum(y, lam):
     return np.array([y[0] + shift, y[1] - shift])
 
 
+# Single source of truth for fixture problem names; unknown names fail loud
+# instead of silently falling through to the generic LASSO objective.
+_KNOWN_PROBLEMS = frozenset({
+    "signed_lasso", "nonnegative_lasso", "box_qp", "nnls",
+    "logistic", "tv", "group", "nuclear",
+})
+
+
 @dataclass(frozen=True)
 class StandardCase:
     problem: str
@@ -55,6 +63,9 @@ class StandardCase:
     groups: tuple[tuple[int, ...], ...] = ()
 
     def __post_init__(self):
+        if self.problem not in _KNOWN_PROBLEMS:
+            raise ValueError(f"unknown problem {self.problem!r}; add its "
+                             "objective branch, reference and competitors")
         for field in fields(self):
             value = getattr(self, field.name)
             if isinstance(value, np.ndarray):

@@ -116,6 +116,12 @@ def solve_admm(A, y, lam, *, mu=0.0, b=None, x0=None, rho=1.0,
                rho_balance=10.0, rho_scale=2.0, max_iter=200,
                cg_max_iter=None, cg_tol=1e-8, residual_tol=1e-4,
                kkt_tol=1e-5, gap_tol=1e-4, certificate_stride=10):
+    """Nonnegative LASSO / elastic net via ADMM with CG inner solves.
+
+    There is no Lipschitz parameter (steps are governed by the ADMM penalty
+    ``rho``); ``mu`` and the output offset ``b`` are supported. Inner CG
+    should run tighter than the outer certificate tolerances.
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     cg_tol = _positive_float(cg_tol, "cg_tol")

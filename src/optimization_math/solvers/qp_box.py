@@ -4,7 +4,7 @@ from typing import Literal
 import numpy as np
 
 from optimization_math.certificates import Certificate
-from optimization_math.certificates_qp import compute_certificate_qp
+from optimization_math.certificates_qp import _validate_qp_hessian, compute_certificate_qp
 from optimization_math.solvers._common import _positive_float, _positive_int
 
 
@@ -46,7 +46,12 @@ def _estimate_qp_lipschitz(Q, *, power_iter=50):
 def solve_qp_box(Q, c, l=None, u=None, *, x0=None, lipschitz=None,
                  max_iter=2000, kkt_tol=1e-5, gap_tol=1e-4,
                  certificate_stride=10, power_iter=50):
-    """Box-constrained QP via projected gradient (FISTA-accelerated projection)."""
+    """Box-constrained QP via projected gradient (FISTA-accelerated projection).
+
+    Q must be symmetric positive semidefinite (validated at entry: the
+    certificate's global lower bound is meaningless otherwise). ``lipschitz``
+    is the spectral norm ||Q||_2 of the Hessian.
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     power_iter = _positive_int(power_iter, "power_iter")
@@ -62,6 +67,7 @@ def solve_qp_box(Q, c, l=None, u=None, *, x0=None, lipschitz=None,
     n = Q.shape[0]
     if c.shape != (n,):
         raise ValueError("c must match Q's dimension")
+    _validate_qp_hessian(Q)
     l = np.full(n, -np.inf) if l is None else np.asarray(l, dtype=np.float64)
     u = np.full(n, np.inf) if u is None else np.asarray(u, dtype=np.float64)
     if l.shape != (n,) or u.shape != (n,) or np.any(l > u):

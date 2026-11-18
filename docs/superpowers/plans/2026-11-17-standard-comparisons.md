@@ -85,3 +85,18 @@ the only cross-task mutable files are the runner and this progress record.
   explicit nonfinite annotations instead of a 1e-16 floor, `n/a (nonfinite)`
   Markdown cells and JSON nulls; full suite 272 passed, matrix 177/177,
   snapshot resynced (PNGs byte-identical, timings refreshed).
+- EGM Goldfish round (2026-11-18): four fresh-context persona reviewers
+  produced 1 Blocker (QP false optimality on indefinite/asymmetric Q),
+  5 Major (group lipschitz contract divergence, permissive semantics/
+  tolerance defaults, --out-dir Windows guard, nuclear docstring, README
+  tree) and 12 Nit. Fixed with 23 red-to-green regressions (suite 295
+  passed, matrix 177/177, snapshot resynced); declined items recorded as
+  accepted trade-offs in docs/reviews/2026-11-17-standard-validation-followup.md.
+  Round 2 verification swarm dispatched on the fixed tree.
+- EGM Round 2: all Round 1 fixes verified by probe; one Major (a vacuous
+  mixed-count regression test) repaired into a genuine both-orderings
+  regression; remaining silent-default nits made fail-loud (algorithm
+  dispatch, KKT gate, colors, fixture problem names, whitespace out-dir
+  parts); nuclear y-size check made explicit; dead SVD removed; dual-point
+  sign label corrected. Final: 304 tests passed warnings-as-errors, matrix
+  177/177, snapshot consistent.

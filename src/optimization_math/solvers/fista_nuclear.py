@@ -42,6 +42,11 @@ def _estimate_nuclear_lipschitz(A, shape, *, power_iter=50):
 def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=None,
                         max_iter=1000, kkt_tol=1e-5, gap_tol=1e-4,
                         certificate_stride=10, restart=True, power_iter=50):
+    """Nuclear-norm denoising via FISTA with singular-value thresholding.
+
+    ``lipschitz`` is ||A||^2 of the matrix-valued operator; X0 must match
+    A's matrix shape (validated at entry).
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     power_iter = _positive_int(power_iter, "power_iter")
@@ -54,6 +59,8 @@ def solve_fista_nuclear(A, y, lam, *, X0=None, lipschitz=None,
     y = np.asarray(y, dtype=np.float64)
     shape = A.shape  # expects A.shape to expose the matrix shape mapping
     X = np.zeros(shape) if X0 is None else np.asarray(X0, dtype=np.float64).copy()
+    if X.shape != tuple(shape):
+        raise ValueError("X0 must match A's matrix shape")
     try:
         lam = float(lam)
     except (TypeError, ValueError):

@@ -122,6 +122,12 @@ def solve_fista(A, y, lam, *, mu=0.0, b=None, x0=None, lipschitz=None,
                 certificate_stride=10, power_iter=50, power_tol=1e-6,
                 restart=True, backtracking=True,
                 lambda_path=None, continuation_tol_scale=10.0):
+    """Nonnegative LASSO / elastic net via FISTA with backtracking and restarts.
+
+    ``lipschitz`` is the squared spectral norm ||A||^2 of A (the ridge term
+    ``mu`` is absorbed in the proximal map, so it does not enter this value);
+    ``b`` is an optional output-space offset.
+    """
     max_iter = _positive_int(max_iter, "max_iter")
     certificate_stride = _positive_int(certificate_stride, "certificate_stride")
     power_iter = _positive_int(power_iter, "power_iter")

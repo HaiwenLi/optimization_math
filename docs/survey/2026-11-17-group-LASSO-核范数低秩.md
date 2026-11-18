@@ -47,12 +47,14 @@ g_{(g)} = -\lambda\,\dfrac{x_{(g)}}{\|x_{(g)}\|_2}, & \|x_{(g)}\|_2\neq0,\\
 
 ### 2.2 group LASSO 对偶
 
-与 LASSO 同构，约束换成逐组：`max_ν { −½‖ν‖² − νᵀy : ‖(Aᵀν)_{(g)}‖₂ ≤ λ, ∀g }`。给定迭代 `x`、残差 `r=Ax−y`，取 `ν=−θ r`，`θ = min(1, λ / max_g ‖(Aᵀr)_{(g)}‖₂)`：
+与 LASSO 同构，约束换成逐组：`max_ν { −½‖ν‖² − νᵀy : ‖(Aᵀν)_{(g)}‖₂ ≤ λ, ∀g }`。给定迭代 `x`、残差 `r=Ax−y`，取 `ν=θ r`，`θ = min(1, λ / max_g ‖(Aᵀr)_{(g)}‖₂)`：
 
 \[
 d(\theta)=-\tfrac12\theta^2\|r\|_2^2-\theta y^T r,\quad
 \mathrm{gap}=\frac{p-d}{\max(1,|p|,|d|)}.
 \]
+
+上式是 μ=0、b=0 的基础形式。实现中的 `compute_certificate_group` 支持弹性网与偏置（`min ½‖Ax+b−y‖²+λΣ‖x_(g)‖₂+μ/2‖x‖²`）：θ 改由 `‖(Aᵀr+μx)_{(g)}‖₂` 计算，对偶为 `−½θ²(‖r‖²+μ‖x‖²)+θ(b−y)ᵀr`。
 
 ### 2.3 核范数 KKT 与谱对偶
 
